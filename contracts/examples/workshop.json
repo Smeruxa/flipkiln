@@ -1,15 +1,52 @@
 {
-  "project": "workshop",
-  "environment": "development",
-  "snapshot": {
-    "revision": 1,
-    "entries": [
-      {"key":"checkout.fast_lane","description":"Shows the express checkout experience.","type":"boolean","defaultValue":false,"enabled":true,"rules":[]},
-      {"key":"checkout.copy","description":"Controls the headline and item limit in the checkout demo.","type":"json","defaultValue":{"headline":"Your order","maxItems":4},"enabled":true,"rules":[],"schema":{"type":"object","properties":{"headline":{"type":"string","minLength":1},"maxItems":{"type":"integer","minimum":1}},"required":["headline","maxItems"],"additionalProperties":false}},
-      {"key":"checkout.button_label","description":"Label on the checkout action.","type":"string","defaultValue":"Continue to payment","enabled":true,"rules":[]},
-      {"key":"checkout.item_limit","description":"Maximum number of items eligible for express checkout.","type":"number","defaultValue":6,"enabled":true,"rules":[]}
-    ]
-  },
-  "context":{"id":"customer-42","attributes":{"plan":"pro","country":"DE"}},
-  "invalidJson":{"headline":"Your order","maxItems":0}
+    "project": "workshop",
+    "environment": "development",
+    "snapshot": {
+        "revision": 1,
+        "entries": [
+            {
+                "key": "checkout.fast_lane",
+                "description": "Shows the express checkout experience.",
+                "type": "boolean",
+                "defaultValue": false,
+                "enabled": true,
+                "rules": []
+            },
+            {
+                "key": "checkout.copy",
+                "description": "Controls the headline and item limit in the checkout demo.",
+                "type": "json",
+                "defaultValue": { "headline": "Your order", "maxItems": 4 },
+                "enabled": true,
+                "rules": [],
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "headline": { "type": "string", "minLength": 1 },
+                        "maxItems": { "type": "integer", "minimum": 1 }
+                    },
+                    "required": ["headline", "maxItems"],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "key": "checkout.button_label",
+                "description": "Label on the checkout action.",
+                "type": "string",
+                "defaultValue": "Continue to payment",
+                "enabled": true,
+                "rules": []
+            },
+            {
+                "key": "checkout.item_limit",
+                "description": "Maximum number of items eligible for express checkout.",
+                "type": "number",
+                "defaultValue": 6,
+                "enabled": true,
+                "rules": []
+            }
+        ]
+    },
+    "context": { "id": "customer-42", "attributes": { "plan": "pro", "country": "DE" } },
+    "invalidJson": { "headline": "Your order", "maxItems": 0 }
 }

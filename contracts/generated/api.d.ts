@@ -400,6 +400,7 @@ export interface components {
             username: string;
             role: components["schemas"]["NullableRole"];
         };
+        /** @description JSON values use finite IEEE 754 numbers and safe integers. Stored strings and property names cannot contain U+0000. */
         JsonValue: boolean | string | number | null | components["schemas"]["JsonValue"][] | {
             [key: string]: components["schemas"]["JsonValue"];
         };

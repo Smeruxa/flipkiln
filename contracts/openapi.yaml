@@ -1,642 +1,651 @@
 openapi: 3.1.0
 info:
-  title: Flipkiln API
-  version: 0.1.0
-  description: Management and application APIs for immutable configuration releases.
+    title: Flipkiln API
+    version: 0.1.0
+    description: Management and application APIs for immutable configuration releases.
 servers:
-  - url: http://localhost:8080
+    - url: http://localhost:8080
 security:
-  - managementSession: []
+    - managementSession: []
 paths:
-  /health/live:
-    get:
-      operationId: liveness
-      security: []
-      responses:
-        '200': {description: The server process is responsive.}
-  /health/ready:
-    get:
-      operationId: readiness
-      security: []
-      responses:
-        '200': {description: PostgreSQL and the application schema are ready.}
-        '503': {$ref: '#/components/responses/Error'}
-  /api/auth/login:
-    post:
-      operationId: login
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [username, password]
-              properties:
-                username: {type: string}
-                password: {type: string, format: password}
-      responses:
-        '200':
-          description: Signed in. Sets the management session cookie.
-          headers:
-            Set-Cookie: {schema: {type: string}}
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Session'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/auth/session:
-    get:
-      operationId: session
-      responses:
-        '200':
-          description: Current management session.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Session'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/auth/logout:
-    post:
-      operationId: logout
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {type: object, additionalProperties: false}
-      responses:
-        '204': {description: The session was cleared.}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects:
-    get:
-      operationId: listProjects
-      responses:
-        '200':
-          description: Projects visible to the current user.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [projects]
-                properties:
-                  projects: {type: array, items: {$ref: '#/components/schemas/Project'}}
-        default: {$ref: '#/components/responses/Error'}
-    post:
-      operationId: createProject
-      description: Requires the bootstrap administrator.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [id, name]
-              properties:
-                id: {type: string, pattern: '^[a-z][a-z0-9-]{0,62}$'}
-                name: {type: string}
-      responses:
-        '201':
-          description: A project with an empty initial release in each environment.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Project'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/members:
+    /health/live:
+        get:
+            operationId: liveness
+            security: []
+            responses:
+                '200': { description: The server process is responsive. }
+    /health/ready:
+        get:
+            operationId: readiness
+            security: []
+            responses:
+                '200': { description: PostgreSQL and the application schema are ready. }
+                '503': { $ref: '#/components/responses/Error' }
+    /api/auth/login:
+        post:
+            operationId: login
+            security: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [username, password]
+                            properties:
+                                username: { type: string }
+                                password: { type: string, format: password }
+            responses:
+                '200':
+                    description: Signed in. Sets the management session cookie.
+                    headers:
+                        Set-Cookie: { schema: { type: string } }
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/Session' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/auth/session:
+        get:
+            operationId: session
+            responses:
+                '200':
+                    description: Current management session.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/Session' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/auth/logout:
+        post:
+            operationId: logout
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { type: object, additionalProperties: false }
+            responses:
+                '204': { description: The session was cleared. }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects:
+        get:
+            operationId: listProjects
+            responses:
+                '200':
+                    description: Projects visible to the current user.
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [projects]
+                                properties:
+                                    projects:
+                                        { type: array, items: { $ref: '#/components/schemas/Project' } }
+                default: { $ref: '#/components/responses/Error' }
+        post:
+            operationId: createProject
+            description: Requires the bootstrap administrator.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [id, name]
+                            properties:
+                                id: { type: string, pattern: '^[a-z][a-z0-9-]{0,62}$' }
+                                name: { type: string }
+            responses:
+                '201':
+                    description: A project with an empty initial release in each environment.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/Project' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/members:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+        get:
+            operationId: listMembers
+            description: Requires admin for this project.
+            responses:
+                '200':
+                    description: Project membership.
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [members]
+                                properties:
+                                    members:
+                                        { type: array, items: { $ref: '#/components/schemas/Member' } }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/members/{username}:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - name: username
+              in: path
+              required: true
+              schema: { type: string }
+        put:
+            operationId: updateMember
+            description: Requires admin for this project. A null role removes project membership.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [role]
+                            properties:
+                                role: { $ref: '#/components/schemas/NullableRole' }
+            responses:
+                '200':
+                    description: Resulting membership.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/Member' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/state:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        get:
+            operationId: getState
+            responses:
+                '200': { $ref: '#/components/responses/State' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/draft:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        put:
+            operationId: saveDraft
+            description: Requires editor or higher. Updates the draft only. A stale draftVersion returns 409.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            allOf:
+                                - $ref: '#/components/schemas/DraftUpdate'
+                                - $ref: '#/components/schemas/EntryList'
+            responses:
+                '200': { $ref: '#/components/responses/State' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/validate:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        post:
+            operationId: validateDraft
+            description: Requires editor or higher.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { $ref: '#/components/schemas/EntryList' }
+            responses:
+                '200':
+                    description: Draft validity and JSON Pointer diagnostics.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/Validation' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/preview:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        post:
+            operationId: previewDraft
+            description: Requires editor or higher. Invalid draft content returns 422.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            allOf:
+                                - $ref: '#/components/schemas/EntryList'
+                                - $ref: '#/components/schemas/EvaluationRequest'
+            responses:
+                '200':
+                    description: Evaluation using draft entries supplied in the request.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/EvaluationResults' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/releases:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        get:
+            operationId: listReleases
+            responses:
+                '200':
+                    description: Release and audit history in descending revision order.
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [releases]
+                                properties:
+                                    releases:
+                                        { type: array, items: { $ref: '#/components/schemas/Release' } }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/releases/{revision}:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+            - name: revision
+              in: path
+              required: true
+              schema: { $ref: '#/components/schemas/Version' }
+        get:
+            operationId: getRelease
+            responses:
+                '200':
+                    description: Immutable historical release.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/ReleaseDetail' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/publish:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        post:
+            operationId: publishDraft
+            description: Requires publisher or higher. Creates and activates a new release from the saved draft.
+            parameters:
+                - $ref: '#/components/parameters/IdempotencyKey'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { $ref: '#/components/schemas/PublishRequest' }
+            responses:
+                '200': { $ref: '#/components/responses/Snapshot' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/rollback:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        post:
+            operationId: rollbackRelease
+            description: Requires publisher or higher. Copies a historical release into a new revision and replaces the draft.
+            parameters:
+                - $ref: '#/components/parameters/IdempotencyKey'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            allOf:
+                                - $ref: '#/components/schemas/PublishRequest'
+                                - type: object
+                                  required: [revision]
+                                  properties:
+                                      revision: { $ref: '#/components/schemas/Version' }
+            responses:
+                '200': { $ref: '#/components/responses/Snapshot' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/tokens:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        get:
+            operationId: listTokens
+            description: Requires admin for this project.
+            responses:
+                '200':
+                    description: Token metadata for this environment.
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [tokens]
+                                properties:
+                                    tokens:
+                                        {
+                                            type: array,
+                                            items: { $ref: '#/components/schemas/ClientToken' },
+                                        }
+                default: { $ref: '#/components/responses/Error' }
+        post:
+            operationId: createToken
+            description: Requires admin for this project.
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required: [name]
+                            properties:
+                                name: { type: string }
+            responses:
+                '201':
+                    description: New application token. The secret is available only in this response.
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/IssuedToken' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/manage/projects/{project}/environments/{environment}/tokens/{id}:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+            - name: id
+              in: path
+              required: true
+              schema: { type: string }
+        delete:
+            operationId: revokeToken
+            description: Requires admin for this project.
+            responses:
+                '204': { description: The application token is revoked. }
+                default: { $ref: '#/components/responses/Error' }
+    /api/client/projects/{project}/environments/{environment}/snapshot:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        get:
+            operationId: readSnapshot
+            security:
+                - applicationToken: []
+            parameters:
+                - name: If-None-Match
+                  in: header
+                  schema: { type: string }
+            responses:
+                '200':
+                    description: Current published snapshot.
+                    headers:
+                        ETag: { $ref: '#/components/headers/SnapshotETag' }
+                    content:
+                        application/json:
+                            schema: { $ref: '#/components/schemas/Snapshot' }
+                '304':
+                    description: The authenticated application's tag still matches.
+                    headers:
+                        ETag: { $ref: '#/components/headers/SnapshotETag' }
+                default: { $ref: '#/components/responses/Error' }
+    /api/client/projects/{project}/environments/{environment}/evaluate:
+        parameters:
+            - $ref: '#/components/parameters/Project'
+            - $ref: '#/components/parameters/Environment'
+        post:
+            operationId: evaluateFlags
+            security:
+                - applicationToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema: { $ref: '#/components/schemas/EvaluationRequest' }
+            responses:
+                '200':
+                    description: All entries are evaluated at the reported published revision.
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/EvaluationResults'
+                                    - type: object
+                                      required: [revision]
+                                      properties:
+                                          revision: { $ref: '#/components/schemas/Version' }
+                default: { $ref: '#/components/responses/Error' }
+components:
+    securitySchemes:
+        managementSession: { type: apiKey, in: cookie, name: flipkiln_session }
+        applicationToken: { type: http, scheme: bearer }
     parameters:
-      - $ref: '#/components/parameters/Project'
-    get:
-      operationId: listMembers
-      description: Requires admin for this project.
-      responses:
-        '200':
-          description: Project membership.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [members]
-                properties:
-                  members: {type: array, items: {$ref: '#/components/schemas/Member'}}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/members/{username}:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - name: username
-        in: path
-        required: true
-        schema: {type: string}
-    put:
-      operationId: updateMember
-      description: Requires admin for this project. A null role removes project membership.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [role]
-              properties:
-                role: {$ref: '#/components/schemas/NullableRole'}
-      responses:
-        '200':
-          description: Resulting membership.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Member'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/state:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    get:
-      operationId: getState
-      responses:
-        '200': {$ref: '#/components/responses/State'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/draft:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    put:
-      operationId: saveDraft
-      description: Requires editor or higher. Updates the draft only. A stale draftVersion returns 409.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/DraftUpdate'
+        Project:
+            name: project
+            in: path
+            required: true
+            schema: { type: string }
+        Environment:
+            name: environment
+            in: path
+            required: true
+            schema: { $ref: '#/components/schemas/Environment' }
+        IdempotencyKey:
+            name: Idempotency-Key
+            in: header
+            required: true
+            description: Reuse after a timeout with the same body. The key is scoped to the actor and environment.
+            schema: { type: string, minLength: 1, maxLength: 128 }
+    headers:
+        SnapshotETag:
+            description: Quoted entity tag identifying this snapshot.
+            schema: { type: string }
+    responses:
+        Error:
+            description: Request failed.
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/ErrorResponse' }
+        Snapshot:
+            description: Resulting active snapshot.
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/Snapshot' }
+        State:
+            description: Draft and active state read together.
+            content:
+                application/json:
+                    schema: { $ref: '#/components/schemas/DraftState' }
+    schemas:
+        Session:
+            type: object
+            required: [username]
+            properties:
+                username: { type: string }
+        Environment:
+            type: string
+            enum: [development, production]
+        Role:
+            type: string
+            enum: [viewer, editor, publisher, admin]
+        NullableRole:
+            anyOf:
+                - $ref: '#/components/schemas/Role'
+                - type: 'null'
+        Project:
+            type: object
+            required: [id, name, role, environments]
+            properties:
+                id: { type: string }
+                name: { type: string }
+                role: { $ref: '#/components/schemas/Role' }
+                environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+        Member:
+            type: object
+            required: [username, role]
+            properties:
+                username: { type: string }
+                role: { $ref: '#/components/schemas/NullableRole' }
+        JsonValue:
+            description: JSON values use finite IEEE 754 numbers and safe integers. Stored strings and property names cannot contain U+0000.
+            anyOf:
+                - { type: boolean }
+                - { type: string }
+                - { type: number }
+                - { type: 'null' }
+                - { type: array, items: { $ref: '#/components/schemas/JsonValue' } }
+                - { type: object, additionalProperties: { $ref: '#/components/schemas/JsonValue' } }
+        AttributeValue:
+            type: [string, number, boolean, 'null']
+        EntryType:
+            type: string
+            enum: [boolean, string, number, json]
+        Rule:
+            oneOf:
+                - $ref: '#/components/schemas/IdsRule'
+                - $ref: '#/components/schemas/AttributeRule'
+                - $ref: '#/components/schemas/RolloutRule'
+            discriminator:
+                propertyName: kind
+                mapping:
+                    ids: '#/components/schemas/IdsRule'
+                    attribute: '#/components/schemas/AttributeRule'
+                    rollout: '#/components/schemas/RolloutRule'
+        IdsRule:
+            type: object
+            required: [id, kind, ids, value]
+            properties:
+                id: { type: string }
+                kind: { const: ids }
+                ids: { type: array, items: { type: string } }
+                value: { $ref: '#/components/schemas/JsonValue' }
+        AttributeRule:
+            type: object
+            required: [id, kind, attribute, equals, value]
+            properties:
+                id: { type: string }
+                kind: { const: attribute }
+                attribute: { type: string }
+                equals: { $ref: '#/components/schemas/AttributeValue' }
+                value: { $ref: '#/components/schemas/JsonValue' }
+        RolloutRule:
+            type: object
+            required: [id, kind, percentage, value]
+            properties:
+                id: { type: string }
+                kind: { const: rollout }
+                percentage: { type: integer, minimum: 0, maximum: 100 }
+                value: { $ref: '#/components/schemas/JsonValue' }
+        Entry:
+            type: object
+            required: [key, description, type, enabled, defaultValue, rules]
+            properties:
+                key: { type: string, pattern: '^[a-z][a-z0-9_.-]{0,63}$' }
+                description: { type: string }
+                type: { $ref: '#/components/schemas/EntryType' }
+                enabled: { type: boolean }
+                defaultValue: { $ref: '#/components/schemas/JsonValue' }
+                rules: { type: array, items: { $ref: '#/components/schemas/Rule' } }
+                schema:
+                    description: Supported subset of JSON Schema Draft 7 for JSON entries.
+                    type: object
+                    additionalProperties: { $ref: '#/components/schemas/JsonValue' }
+        EntryList:
+            type: object
+            required: [entries]
+            properties:
+                entries: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+        Version:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+        Snapshot:
+            allOf:
                 - $ref: '#/components/schemas/EntryList'
-      responses:
-        '200': {$ref: '#/components/responses/State'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/validate:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    post:
-      operationId: validateDraft
-      description: Requires editor or higher.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/EntryList'}
-      responses:
-        '200':
-          description: Draft validity and JSON Pointer diagnostics.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Validation'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/preview:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    post:
-      operationId: previewDraft
-      description: Requires editor or higher. Invalid draft content returns 422.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/EntryList'
-                - $ref: '#/components/schemas/EvaluationRequest'
-      responses:
-        '200':
-          description: Evaluation using draft entries supplied in the request.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/EvaluationResults'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/releases:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    get:
-      operationId: listReleases
-      responses:
-        '200':
-          description: Release and audit history in descending revision order.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [releases]
-                properties:
-                  releases: {type: array, items: {$ref: '#/components/schemas/Release'}}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/releases/{revision}:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-      - name: revision
-        in: path
-        required: true
-        schema: {$ref: '#/components/schemas/Version'}
-    get:
-      operationId: getRelease
-      responses:
-        '200':
-          description: Immutable historical release.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReleaseDetail'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/publish:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    post:
-      operationId: publishDraft
-      description: Requires publisher or higher. Creates and activates a new release from the saved draft.
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/PublishRequest'}
-      responses:
-        '200': {$ref: '#/components/responses/Snapshot'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/rollback:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    post:
-      operationId: rollbackRelease
-      description: Requires publisher or higher. Copies a historical release into a new revision and replaces the draft.
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/PublishRequest'
                 - type: object
                   required: [revision]
                   properties:
-                    revision: {$ref: '#/components/schemas/Version'}
-      responses:
-        '200': {$ref: '#/components/responses/Snapshot'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/tokens:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    get:
-      operationId: listTokens
-      description: Requires admin for this project.
-      responses:
-        '200':
-          description: Token metadata for this environment.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [tokens]
-                properties:
-                  tokens: {type: array, items: {$ref: '#/components/schemas/ClientToken'}}
-        default: {$ref: '#/components/responses/Error'}
-    post:
-      operationId: createToken
-      description: Requires admin for this project.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name: {type: string}
-      responses:
-        '201':
-          description: New application token. The secret is available only in this response.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssuedToken'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/manage/projects/{project}/environments/{environment}/tokens/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-      - name: id
-        in: path
-        required: true
-        schema: {type: string}
-    delete:
-      operationId: revokeToken
-      description: Requires admin for this project.
-      responses:
-        '204': {description: The application token is revoked.}
-        default: {$ref: '#/components/responses/Error'}
-  /api/client/projects/{project}/environments/{environment}/snapshot:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    get:
-      operationId: readSnapshot
-      security:
-        - applicationToken: []
-      parameters:
-        - name: If-None-Match
-          in: header
-          schema: {type: string}
-      responses:
-        '200':
-          description: Current published snapshot.
-          headers:
-            ETag: {$ref: '#/components/headers/SnapshotETag'}
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Snapshot'}
-        '304':
-          description: The authenticated application's tag still matches.
-          headers:
-            ETag: {$ref: '#/components/headers/SnapshotETag'}
-        default: {$ref: '#/components/responses/Error'}
-  /api/client/projects/{project}/environments/{environment}/evaluate:
-    parameters:
-      - $ref: '#/components/parameters/Project'
-      - $ref: '#/components/parameters/Environment'
-    post:
-      operationId: evaluateFlags
-      security:
-        - applicationToken: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/EvaluationRequest'}
-      responses:
-        '200':
-          description: All entries are evaluated at the reported published revision.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/EvaluationResults'
-                  - type: object
-                    required: [revision]
+                      revision: { $ref: '#/components/schemas/Version' }
+        DraftUpdate:
+            type: object
+            required: [draftVersion]
+            properties:
+                draftVersion: { $ref: '#/components/schemas/Version' }
+        DraftState:
+            allOf:
+                - $ref: '#/components/schemas/EntryList'
+                - $ref: '#/components/schemas/DraftUpdate'
+                - type: object
+                  required: [active]
+                  properties:
+                      active: { $ref: '#/components/schemas/Snapshot' }
+        PublishRequest:
+            allOf:
+                - $ref: '#/components/schemas/DraftUpdate'
+                - type: object
+                  required: [note]
+                  properties:
+                      note: { type: string }
+        Release:
+            type: object
+            required: [revision, kind, sourceRevision, createdAt, actor, note]
+            properties:
+                revision: { $ref: '#/components/schemas/Version' }
+                kind: { type: string, enum: [initial, publish, rollback] }
+                sourceRevision:
+                    anyOf:
+                        - $ref: '#/components/schemas/Version'
+                        - type: 'null'
+                createdAt: { type: string, format: date-time }
+                actor: { type: string }
+                note: { type: string }
+        ReleaseDetail:
+            allOf:
+                - $ref: '#/components/schemas/EntryList'
+                - $ref: '#/components/schemas/Release'
+        Issue:
+            type: object
+            required: [path, message]
+            properties:
+                path: { type: string, description: JSON Pointer to the affected field. }
+                message: { type: string }
+        Validation:
+            type: object
+            required: [valid, issues]
+            properties:
+                valid: { type: boolean }
+                issues: { type: array, items: { $ref: '#/components/schemas/Issue' } }
+        ErrorResponse:
+            type: object
+            required: [error]
+            properties:
+                error:
+                    type: object
+                    required: [code, message]
                     properties:
-                      revision: {$ref: '#/components/schemas/Version'}
-        default: {$ref: '#/components/responses/Error'}
-components:
-  securitySchemes:
-    managementSession: {type: apiKey, in: cookie, name: flipkiln_session}
-    applicationToken: {type: http, scheme: bearer}
-  parameters:
-    Project:
-      name: project
-      in: path
-      required: true
-      schema: {type: string}
-    Environment:
-      name: environment
-      in: path
-      required: true
-      schema: {$ref: '#/components/schemas/Environment'}
-    IdempotencyKey:
-      name: Idempotency-Key
-      in: header
-      required: true
-      description: Reuse after a timeout with the same body. The key is scoped to the actor and environment.
-      schema: {type: string, minLength: 1, maxLength: 128}
-  headers:
-    SnapshotETag:
-      description: Quoted entity tag identifying this snapshot.
-      schema: {type: string}
-  responses:
-    Error:
-      description: Request failed.
-      content:
-        application/json:
-          schema: {$ref: '#/components/schemas/ErrorResponse'}
-    Snapshot:
-      description: Resulting active snapshot.
-      content:
-        application/json:
-          schema: {$ref: '#/components/schemas/Snapshot'}
-    State:
-      description: Draft and active state read together.
-      content:
-        application/json:
-          schema: {$ref: '#/components/schemas/DraftState'}
-  schemas:
-    Session:
-      type: object
-      required: [username]
-      properties:
-        username: {type: string}
-    Environment:
-      type: string
-      enum: [development, production]
-    Role:
-      type: string
-      enum: [viewer, editor, publisher, admin]
-    NullableRole:
-      anyOf:
-        - $ref: '#/components/schemas/Role'
-        - type: 'null'
-    Project:
-      type: object
-      required: [id, name, role, environments]
-      properties:
-        id: {type: string}
-        name: {type: string}
-        role: {$ref: '#/components/schemas/Role'}
-        environments: {type: array, items: {$ref: '#/components/schemas/Environment'}}
-    Member:
-      type: object
-      required: [username, role]
-      properties:
-        username: {type: string}
-        role: {$ref: '#/components/schemas/NullableRole'}
-    JsonValue:
-      anyOf:
-        - {type: boolean}
-        - {type: string}
-        - {type: number}
-        - {type: 'null'}
-        - {type: array, items: {$ref: '#/components/schemas/JsonValue'}}
-        - {type: object, additionalProperties: {$ref: '#/components/schemas/JsonValue'}}
-    AttributeValue:
-      type: [string, number, boolean, 'null']
-    EntryType:
-      type: string
-      enum: [boolean, string, number, json]
-    Rule:
-      oneOf:
-        - $ref: '#/components/schemas/IdsRule'
-        - $ref: '#/components/schemas/AttributeRule'
-        - $ref: '#/components/schemas/RolloutRule'
-      discriminator:
-        propertyName: kind
-        mapping:
-          ids: '#/components/schemas/IdsRule'
-          attribute: '#/components/schemas/AttributeRule'
-          rollout: '#/components/schemas/RolloutRule'
-    IdsRule:
-      type: object
-      required: [id, kind, ids, value]
-      properties:
-        id: {type: string}
-        kind: {const: ids}
-        ids: {type: array, items: {type: string}}
-        value: {$ref: '#/components/schemas/JsonValue'}
-    AttributeRule:
-      type: object
-      required: [id, kind, attribute, equals, value]
-      properties:
-        id: {type: string}
-        kind: {const: attribute}
-        attribute: {type: string}
-        equals: {$ref: '#/components/schemas/AttributeValue'}
-        value: {$ref: '#/components/schemas/JsonValue'}
-    RolloutRule:
-      type: object
-      required: [id, kind, percentage, value]
-      properties:
-        id: {type: string}
-        kind: {const: rollout}
-        percentage: {type: integer, minimum: 0, maximum: 100}
-        value: {$ref: '#/components/schemas/JsonValue'}
-    Entry:
-      type: object
-      required: [key, description, type, enabled, defaultValue, rules]
-      properties:
-        key: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,63}$'}
-        description: {type: string}
-        type: {$ref: '#/components/schemas/EntryType'}
-        enabled: {type: boolean}
-        defaultValue: {$ref: '#/components/schemas/JsonValue'}
-        rules: {type: array, items: {$ref: '#/components/schemas/Rule'}}
-        schema:
-          description: Supported subset of JSON Schema Draft 7 for JSON entries.
-          type: object
-          additionalProperties: {$ref: '#/components/schemas/JsonValue'}
-    EntryList:
-      type: object
-      required: [entries]
-      properties:
-        entries: {type: array, items: {$ref: '#/components/schemas/Entry'}}
-    Version:
-      type: integer
-      minimum: 1
-      maximum: 9007199254740991
-    Snapshot:
-      allOf:
-        - $ref: '#/components/schemas/EntryList'
-        - type: object
-          required: [revision]
-          properties:
-            revision: {$ref: '#/components/schemas/Version'}
-    DraftUpdate:
-      type: object
-      required: [draftVersion]
-      properties:
-        draftVersion: {$ref: '#/components/schemas/Version'}
-    DraftState:
-      allOf:
-        - $ref: '#/components/schemas/EntryList'
-        - $ref: '#/components/schemas/DraftUpdate'
-        - type: object
-          required: [active]
-          properties:
-            active: {$ref: '#/components/schemas/Snapshot'}
-    PublishRequest:
-      allOf:
-        - $ref: '#/components/schemas/DraftUpdate'
-        - type: object
-          required: [note]
-          properties:
-            note: {type: string}
-    Release:
-      type: object
-      required: [revision, kind, sourceRevision, createdAt, actor, note]
-      properties:
-        revision: {$ref: '#/components/schemas/Version'}
-        kind: {type: string, enum: [initial, publish, rollback]}
-        sourceRevision:
-          anyOf:
-            - $ref: '#/components/schemas/Version'
-            - type: 'null'
-        createdAt: {type: string, format: date-time}
-        actor: {type: string}
-        note: {type: string}
-    ReleaseDetail:
-      allOf:
-        - $ref: '#/components/schemas/EntryList'
-        - $ref: '#/components/schemas/Release'
-    Issue:
-      type: object
-      required: [path, message]
-      properties:
-        path: {type: string, description: JSON Pointer to the affected field.}
-        message: {type: string}
-    Validation:
-      type: object
-      required: [valid, issues]
-      properties:
-        valid: {type: boolean}
-        issues: {type: array, items: {$ref: '#/components/schemas/Issue'}}
-    ErrorResponse:
-      type: object
-      required: [error]
-      properties:
-        error:
-          type: object
-          required: [code, message]
-          properties:
-            code: {type: string}
-            message: {type: string}
-            issues: {type: array, items: {$ref: '#/components/schemas/Issue'}}
-    RequestContext:
-      type: object
-      properties:
-        id: {type: string}
-        attributes:
-          type: object
-          additionalProperties: {$ref: '#/components/schemas/AttributeValue'}
-    EvaluationRequest:
-      type: object
-      required: [keys, context]
-      properties:
-        keys: {type: array, items: {type: string}}
-        context: {$ref: '#/components/schemas/RequestContext'}
-        expectedTypes:
-          type: object
-          additionalProperties: {$ref: '#/components/schemas/EntryType'}
-    EvaluationResult:
-      type: object
-      required: [key, reason]
-      properties:
-        key: {type: string}
-        reason: {type: string, enum: [disabled, rule_match, default, unknown_key, type_mismatch]}
-        value: {$ref: '#/components/schemas/JsonValue'}
-        ruleId: {type: string}
-    EvaluationResults:
-      type: object
-      required: [results]
-      properties:
-        results: {type: array, items: {$ref: '#/components/schemas/EvaluationResult'}}
-    ClientToken:
-      type: object
-      required: [id, name, createdAt, revokedAt]
-      properties:
-        id: {type: string}
-        name: {type: string}
-        createdAt: {type: string, format: date-time}
-        revokedAt: {type: [string, 'null'], format: date-time}
-    IssuedToken:
-      allOf:
-        - $ref: '#/components/schemas/ClientToken'
-        - type: object
-          required: [token]
-          properties:
-            token: {type: string}
+                        code: { type: string }
+                        message: { type: string }
+                        issues: { type: array, items: { $ref: '#/components/schemas/Issue' } }
+        RequestContext:
+            type: object
+            properties:
+                id: { type: string }
+                attributes:
+                    type: object
+                    additionalProperties: { $ref: '#/components/schemas/AttributeValue' }
+        EvaluationRequest:
+            type: object
+            required: [keys, context]
+            properties:
+                keys: { type: array, items: { type: string } }
+                context: { $ref: '#/components/schemas/RequestContext' }
+                expectedTypes:
+                    type: object
+                    additionalProperties: { $ref: '#/components/schemas/EntryType' }
+        EvaluationResult:
+            type: object
+            required: [key, reason]
+            properties:
+                key: { type: string }
+                reason:
+                    { type: string, enum: [disabled, rule_match, default, unknown_key, type_mismatch] }
+                value: { $ref: '#/components/schemas/JsonValue' }
+                ruleId: { type: string }
+        EvaluationResults:
+            type: object
+            required: [results]
+            properties:
+                results: { type: array, items: { $ref: '#/components/schemas/EvaluationResult' } }
+        ClientToken:
+            type: object
+            required: [id, name, createdAt, revokedAt]
+            properties:
+                id: { type: string }
+                name: { type: string }
+                createdAt: { type: string, format: date-time }
+                revokedAt: { type: [string, 'null'], format: date-time }
+        IssuedToken:
+            allOf:
+                - $ref: '#/components/schemas/ClientToken'
+                - type: object
+                  required: [token]
+                  properties:
+                      token: { type: string }

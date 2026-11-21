@@ -1,3 +1,5 @@
+@use 'breakpoints';
+
 .editor-wrap {
     min-width: 0;
     scroll-margin-top: 10px;
@@ -368,7 +370,7 @@
     gap: 8px;
     align-items: end;
 }
-@media (max-width: 670px) {
+@media (max-width: breakpoints.$compact) {
     .field input,
     .field select,
     .field textarea,

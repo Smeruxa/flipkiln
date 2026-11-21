@@ -1,3 +1,5 @@
+@use 'breakpoints';
+
 .shell {
     display: grid;
     grid-template-columns: 226px minmax(0, 1fr);
@@ -643,7 +645,7 @@
         padding: 24px 17px 35px;
     }
 }
-@media (max-width: 670px) {
+@media (max-width: breakpoints.$compact) {
     .main-content {
         padding-inline: 13px;
     }
@@ -764,7 +766,7 @@
         display: none;
     }
 }
-@media (max-width: 355px) {
+@media (max-width: breakpoints.$narrow) {
     .side-menu nav .nav-item svg {
         display: none;
     }

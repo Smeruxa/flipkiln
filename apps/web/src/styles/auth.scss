@@ -1,3 +1,5 @@
+@use 'breakpoints';
+
 .auth-page {
     min-height: 100dvh;
     display: grid;
@@ -87,7 +89,7 @@
     padding: 20px;
     color: var(--muted);
 }
-@media (max-width: 670px) {
+@media (max-width: breakpoints.$compact) {
     .auth-page {
         grid-template-columns: minmax(0, 1fr);
     }

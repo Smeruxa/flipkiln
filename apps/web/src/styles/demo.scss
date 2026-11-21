@@ -1,3 +1,5 @@
+@use 'breakpoints';
+
 .demo-page {
     background: #f7f5ed;
     min-height: 100dvh;
@@ -185,7 +187,7 @@
     color: var(--muted);
     font-size: 0.82rem;
 }
-@media (max-width: 670px) {
+@media (max-width: breakpoints.$compact) {
     .demo-connection {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -204,7 +206,7 @@
         object-position: 50% 48%;
     }
 }
-@media (max-width: 355px) {
+@media (max-width: breakpoints.$narrow) {
     .demo-topbar > span svg {
         display: none;
     }

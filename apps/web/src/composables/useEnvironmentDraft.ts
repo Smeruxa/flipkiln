@@ -12,6 +12,10 @@ import type {
 import { diffEntries, editableEntry, serializeDraft } from '../lib/editor';
 import type { WorkingEntry } from '../lib/editor';
 
+export function newestDraftState(current: DraftState | undefined, candidate: DraftState): DraftState {
+    return current && current.draftVersion >= candidate.draftVersion ? current : candidate;
+}
+
 type DraftNotice = { message: string; tone: 'error' | 'success' | 'info'; issues?: Issue[] };
 
 export function useEnvironmentDraft(project: string, environment: Environment) {
@@ -25,7 +29,9 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
         refetch: loadState,
     } = useQuery({
         queryKey: stateKey,
-        queryFn: () => api.state(project, environment),
+        queryFn: ({ signal }) => api.state(project, environment, signal),
+        structuralSharing: (current, candidate) =>
+            newestDraftState(current as DraftState | undefined, candidate as DraftState),
     });
     const working = ref<WorkingEntry[]>([]);
     const base = ref<DraftState>();
@@ -71,6 +77,7 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
             ) ?? [],
     );
     function receiveState(state: DraftState) {
+        if (base.value && state.draftVersion < base.value.draftVersion) return;
         const preferred = selected.value?.key;
         base.value = state;
         working.value = state.entries.map((entry) => editableEntry(entry));
@@ -83,7 +90,9 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
     watch(
         stateData,
         (state) => {
-            if (state && !dirty.value) receiveState(state);
+            if (!state) return;
+            if (!dirty.value) receiveState(state);
+            else if (base.value && state.draftVersion > base.value.draftVersion) conflict.value = true;
         },
         { immediate: true },
     );
@@ -133,6 +142,7 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
         return true;
     }
     async function performDraftAction(action: () => Promise<void>) {
+        if (busy.value) return;
         notice.value = undefined;
         if (!validInput()) return;
         busy.value = true;
@@ -154,8 +164,9 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
                 draftVersion,
                 workingEntries.value.entries,
             );
-            receiveState(state);
-            client.setQueryData(stateKey, state);
+            await client.cancelQueries({ queryKey: stateKey, exact: true });
+            const latest = client.setQueryData<DraftState>(stateKey, state);
+            receiveState(latest ?? state);
             conflict.value = false;
             notice.value = {
                 message: `Draft saved. Applications continue using revision ${state.active.revision}.`,
@@ -187,6 +198,7 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
         });
     }
     async function acceptLatest() {
+        if (busy.value) return;
         if (dirty.value && !window.confirm('Discard the unsaved edits in this environment?')) return;
         busy.value = true;
         try {
@@ -221,7 +233,6 @@ export function useEnvironmentDraft(project: string, environment: Environment) {
         selectedLive,
         stagedKeys,
         removedEntries,
-        receiveState,
         selectEntry,
         addEntry,
         archiveEntry,

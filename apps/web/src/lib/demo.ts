@@ -1,4 +1,5 @@
-import type { Entry, EntryType, Environment, JsonValue, RequestContext, Rule, Snapshot } from './api';
+import type { Entry, Environment, JsonValue, RequestContext, Snapshot } from './api';
+import { decodeSnapshot, isRecord } from './snapshot';
 
 export const demoContext: RequestContext = {
     id: 'customer-42',
@@ -11,74 +12,6 @@ export const demoDefaults = {
     button: 'Continue to payment',
     expressLimit: 6,
 };
-
-function object(value: unknown): value is Record<string, unknown> {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-function isScalar(value: unknown): value is string | number | boolean | null {
-    return (
-        value === null ||
-        typeof value === 'string' ||
-        typeof value === 'boolean' ||
-        (typeof value === 'number' &&
-            Number.isFinite(value) &&
-            (!Number.isInteger(value) || Number.isSafeInteger(value)))
-    );
-}
-function isJson(value: unknown): value is JsonValue {
-    if (isScalar(value)) return true;
-    if (Array.isArray(value)) return value.every(isJson);
-    return object(value) && Object.values(value).every(isJson);
-}
-function matchesType(type: EntryType, value: unknown): boolean {
-    return type === 'json' ? isJson(value) : typeof value === type && isScalar(value);
-}
-function validRule(rule: unknown, type: EntryType): rule is Rule {
-    if (!object(rule) || typeof rule.id !== 'string' || !matchesType(type, rule.value)) return false;
-    if (rule.kind === 'ids')
-        return Array.isArray(rule.ids) && rule.ids.every((value: unknown) => typeof value === 'string');
-    if (rule.kind === 'attribute') return typeof rule.attribute === 'string' && isScalar(rule.equals);
-    return (
-        rule.kind === 'rollout' &&
-        typeof rule.percentage === 'number' &&
-        Number.isInteger(rule.percentage) &&
-        rule.percentage >= 0 &&
-        rule.percentage <= 100
-    );
-}
-function validEntry(entry: unknown): entry is Entry {
-    if (
-        !object(entry) ||
-        typeof entry.key !== 'string' ||
-        typeof entry.description !== 'string' ||
-        typeof entry.enabled !== 'boolean'
-    )
-        return false;
-    const type = entry.type;
-    return (
-        (type === 'boolean' || type === 'string' || type === 'number' || type === 'json') &&
-        matchesType(type, entry.defaultValue) &&
-        Array.isArray(entry.rules) &&
-        entry.rules.every((rule) => validRule(rule, type))
-    );
-}
-
-export function decodeSnapshot(payload: unknown): Snapshot {
-    if (
-        !object(payload) ||
-        typeof payload.revision !== 'number' ||
-        !Number.isSafeInteger(payload.revision) ||
-        payload.revision < 1 ||
-        !Array.isArray(payload.entries) ||
-        !payload.entries.every(validEntry)
-    ) {
-        throw new Error('The server returned an invalid configuration snapshot.');
-    }
-    const keys = new Set(payload.entries.map((entry) => entry.key));
-    if (keys.size !== payload.entries.length)
-        throw new Error('The snapshot contains duplicate configuration keys.');
-    return { revision: payload.revision, entries: payload.entries };
-}
 
 export function rolloutBucket(
     project: string,
@@ -135,11 +68,11 @@ export function checkoutSettings(snapshot: Snapshot | null, project: string, env
     return {
         express: typeof express === 'boolean' ? express : demoDefaults.express,
         headline:
-            object(copy) && typeof copy.headline === 'string' && copy.headline.length > 0
+            isRecord(copy) && typeof copy.headline === 'string' && copy.headline.length > 0
                 ? copy.headline
                 : demoDefaults.headline,
         maxItems:
-            object(copy) && typeof copy.maxItems === 'number' && copy.maxItems >= 1
+            isRecord(copy) && typeof copy.maxItems === 'number' && copy.maxItems >= 1
                 ? copy.maxItems
                 : demoDefaults.maxItems,
         button: typeof button === 'string' && button.length > 0 ? button : demoDefaults.button,

@@ -4,6 +4,7 @@
     import type { EvaluationResult, RequestContext } from '../lib/api';
     import { demoContext } from '../lib/demo';
     import { displayValue } from '../lib/editor';
+    import { isJsonScalar, isRecord } from '../lib/snapshot';
 
     defineProps<{ busy: boolean; result?: EvaluationResult }>();
     const emit = defineEmits<{ evaluate: [context: RequestContext]; reset: [] }>();
@@ -11,6 +12,7 @@
     const subject = ref('');
     const attributes = ref('{}');
     const error = ref('');
+    const idError = ref('');
     const reasonNames = {
         disabled: 'Targeting disabled',
         rule_match: 'Rule matched',
@@ -21,31 +23,22 @@
 
     watch([subject, attributes], () => {
         error.value = '';
+        idError.value = '';
         emit('reset');
     });
 
     function useExample() {
-        subject.value = demoContext.id ?? '';
+        subject.value = JSON.stringify(demoContext.id);
         attributes.value = JSON.stringify(demoContext.attributes, null, 2);
     }
 
     function isValidAttributes(value: unknown): value is NonNullable<RequestContext['attributes']> {
-        if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-        return Object.values(value).every((attribute: unknown) => {
-            if (typeof attribute === 'number') {
-                return (
-                    Number.isFinite(attribute) &&
-                    (!Number.isInteger(attribute) || Number.isSafeInteger(attribute))
-                );
-            }
-            return (
-                attribute === null || typeof attribute === 'string' || typeof attribute === 'boolean'
-            );
-        });
+        return isRecord(value) && Object.values(value).every(isJsonScalar);
     }
 
     function submit() {
         error.value = '';
+        idError.value = '';
         let parsed: unknown;
         try {
             parsed = JSON.parse(attributes.value);
@@ -58,7 +51,18 @@
                 'Use an object with strings, safe numbers, booleans, or null as attribute values.';
             return;
         }
-        emit('evaluate', { id: subject.value || undefined, attributes: parsed });
+        let idValue: unknown;
+        try {
+            idValue = subject.value === '' ? undefined : JSON.parse(subject.value);
+        } catch {
+            idError.value = 'Enter the user ID as a JSON string.';
+            return;
+        }
+        if (idValue !== undefined && (typeof idValue !== 'string' || idValue === '')) {
+            idError.value = 'Use a nonempty JSON string or leave the user ID blank.';
+            return;
+        }
+        emit('evaluate', { id: idValue, attributes: parsed });
     }
 </script>
 
@@ -66,7 +70,12 @@
     <form class="form-stack" @submit.prevent="submit">
         <div class="field">
             <label :for="`${id}-subject`">User ID (optional)</label>
-            <input :id="`${id}-subject`" v-model="subject" placeholder="customer-42" :disabled="busy" />
+            <input
+                :id="`${id}-subject`"
+                v-model="subject"
+                placeholder='"customer-42"'
+                :disabled="busy"
+            />
         </div>
         <div class="field">
             <label :for="`${id}-attributes`">Context attributes</label>

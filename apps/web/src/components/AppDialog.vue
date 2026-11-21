@@ -18,6 +18,7 @@
         busy?: boolean;
         wide?: boolean;
         protect?: boolean;
+        returnFocus?: () => HTMLElement | null;
     }>();
 
     const heading = ref<HTMLElement>();
@@ -39,9 +40,10 @@
         void nextTick(() => heading.value?.focus());
     }
     function focusOnClose(event: Event) {
-        if (!opener?.isConnected || opener.matches(':disabled')) return;
+        const target = props.returnFocus ? props.returnFocus() : opener;
+        if (!target?.isConnected || target.matches(':disabled')) return;
         event.preventDefault();
-        opener.focus();
+        void nextTick(() => target.focus());
     }
 </script>
 

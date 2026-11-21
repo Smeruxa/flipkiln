@@ -15,14 +15,21 @@
         source?: number;
         entries: Entry[];
         active: Snapshot;
+        savedDraft: Entry[];
         attempt?: ReleaseAttempt;
     };
-    const props = defineProps<{ project: string; environment: Environment; review: ReviewSnapshot }>();
+    const props = defineProps<{
+        open: boolean;
+        project: string;
+        environment: Environment;
+        review: ReviewSnapshot;
+        finish: (snapshot: Snapshot, review: ReviewSnapshot) => Promise<void>;
+        returnFocus: () => HTMLElement | null;
+    }>();
     const emit = defineEmits<{
         close: [];
         conflict: [];
         remember: [attempt?: ReleaseAttempt];
-        released: [snapshot: Snapshot, review: ReviewSnapshot];
     }>();
     const reviewing = ref(false);
     const releasing = ref(false);
@@ -32,6 +39,11 @@
     const changed = ref(false);
     const changes = computed(() => diffEntries(props.review.active.entries, props.review.entries));
     const isRollback = computed(() => props.review.kind === 'rollback');
+    const draftChanges = computed(() => {
+        const { active, savedDraft, entries } = props.review;
+        if (!isRollback.value || !diffEntries(active.entries, savedDraft).length) return [];
+        return diffEntries(savedDraft, entries);
+    });
     const environmentName = computed(() => environmentLabel[props.environment]);
     const isProduction = computed(() => props.environment === 'production');
     const title = computed(() =>
@@ -110,9 +122,13 @@
                           attempt.key,
                       );
             emit('remember');
-            emit('released', snapshot, review);
+            await props.finish(snapshot, review);
         } catch (error) {
-            const ambiguous = error instanceof ApiError && (error.status === 0 || error.status >= 500);
+            const ambiguous =
+                error instanceof ApiError &&
+                (error.status === 0 ||
+                    error.status >= 500 ||
+                    error.code === 'invalid_success_response');
             if (!ambiguous) emit('remember');
             if (error instanceof ApiError && error.code === 'draft_conflict') {
                 changed.value = true;
@@ -133,7 +149,8 @@
 
 <template>
     <AppDialog
-        :open="true"
+        :open="open"
+        :return-focus="returnFocus"
         :title="title"
         :description="description"
         :busy="releasing || reviewing"
@@ -169,6 +186,10 @@
                 </h3>
                 <ChangeDiff :changes="changes" />
             </div>
+            <details v-if="draftChanges.length" class="schema-details">
+                <summary>Saved draft changes ({{ draftChanges.length }})</summary>
+                <ChangeDiff :changes="draftChanges" />
+            </details>
             <form id="release-note-form" @submit.prevent="release">
                 <div class="field">
                     <label for="release-note">Release note (optional)</label>

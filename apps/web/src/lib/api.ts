@@ -1,4 +1,5 @@
 import type { components } from '../../../../contracts/generated/api';
+import { decodeSnapshot } from './snapshot';
 
 export type { components };
 
@@ -36,11 +37,21 @@ export class ApiError extends Error {
     }
 }
 
-type Options = { method?: string; body?: object; headers?: HeadersInit };
-async function request<T>(path: string, { method = 'GET', body, headers }: Options = {}): Promise<T> {
+type Options<T> = {
+    method?: string;
+    body?: object;
+    headers?: HeadersInit;
+    signal?: AbortSignal;
+    decode?: (payload: unknown) => T;
+};
+async function request<T>(
+    path: string,
+    { method = 'GET', body, headers, signal, decode }: Options<T> = {},
+): Promise<T> {
     const requestHeaders = new Headers(headers);
     if (body !== undefined) requestHeaders.set('Content-Type', 'application/json');
 
+    const timeout = AbortSignal.timeout(12000);
     let response: Response;
     try {
         response = await fetch(`/api${path}`, {
@@ -49,9 +60,10 @@ async function request<T>(path: string, { method = 'GET', body, headers }: Optio
             body: body === undefined ? undefined : JSON.stringify(body),
             cache: 'no-store',
             credentials: 'same-origin',
-            signal: AbortSignal.timeout(12000),
+            signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
         });
     } catch {
+        if (signal?.aborted) throw signal.reason;
         throw new ApiError(
             0,
             'connection_failed',
@@ -59,9 +71,21 @@ async function request<T>(path: string, { method = 'GET', body, headers }: Optio
         );
     }
 
-    if (response.status === 204) return undefined as T;
+    if (response.ok) {
+        if (!decode && response.status === 204) return undefined as T;
+        try {
+            const payload: unknown = await response.json();
+            if (payload !== null) return decode ? decode(payload) : (payload as T);
+        } catch {
+            if (signal?.aborted) throw signal.reason;
+        }
+        throw new ApiError(
+            response.status,
+            'invalid_success_response',
+            'Flipkiln returned an unreadable response. Try again.',
+        );
+    }
     const payload = await response.json().catch(() => null);
-    if (response.ok && payload !== null) return payload as T;
     if (response.status === 401 && path !== '/auth/login' && path !== '/auth/session') {
         window.dispatchEvent(new Event('flipkiln-session-expired'));
     }
@@ -95,7 +119,8 @@ export const api = {
             method: 'PUT',
             body: { role },
         }),
-    state: (project: string, env: Environment) => request<DraftState>(`${envPath(project, env)}/state`),
+    state: (project: string, env: Environment, signal?: AbortSignal) =>
+        request<DraftState>(`${envPath(project, env)}/state`, { signal }),
     saveDraft: (project: string, env: Environment, draftVersion: number, entries: Entry[]) =>
         request<DraftState>(`${envPath(project, env)}/draft`, {
             method: 'PUT',
@@ -122,6 +147,7 @@ export const api = {
         request<Snapshot>(`${envPath(project, env)}/publish`, {
             method: 'POST',
             headers: { 'Idempotency-Key': key },
+            decode: decodeSnapshot,
             body: { draftVersion, note },
         }),
     rollback: (
@@ -135,6 +161,7 @@ export const api = {
         request<Snapshot>(`${envPath(project, env)}/rollback`, {
             method: 'POST',
             headers: { 'Idempotency-Key': key },
+            decode: decodeSnapshot,
             body: { revision, draftVersion, note },
         }),
     tokens: (project: string, env: Environment) =>

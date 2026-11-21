@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry } from './api';
-import { checkoutSettings, decodeSnapshot, demoDefaults, localValue, rolloutBucket } from './demo';
+import { checkoutSettings, demoDefaults, localValue, rolloutBucket } from './demo';
+import { decodeSnapshot } from './snapshot';
 
 const entry: Entry = {
     key: 'checkout.fast_lane',

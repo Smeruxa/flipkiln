@@ -54,7 +54,6 @@
         selectedLive,
         stagedKeys,
         removedEntries,
-        receiveState,
         saveDraft,
         validateDraft,
         previewEntry,
@@ -139,6 +138,8 @@
     });
 
     const review = ref<ReviewSnapshot>();
+    const reviewOpen = ref(false);
+    const reviewCompleted = ref(false);
     const releaseAttempts = new Map<string, ReleaseAttempt>();
     let releaseTrigger: HTMLElement | null = null;
     function reviewKey(item: ReviewSnapshot) {
@@ -152,12 +153,12 @@
         else releaseAttempts.delete(reviewKey(item));
     }
     function closeReview() {
-        review.value = undefined;
-        void nextTick(() => {
-            if (releaseTrigger?.isConnected && !releaseTrigger.matches(':disabled'))
-                releaseTrigger.focus();
-            else document.getElementById('section-title')?.focus();
-        });
+        reviewOpen.value = false;
+    }
+    function focusAfterReview() {
+        if (reviewCompleted.value) return document.getElementById('draft-notice');
+        if (releaseTrigger?.isConnected && !releaseTrigger.matches(':disabled')) return releaseTrigger;
+        return document.getElementById('section-title');
     }
     function openReview(target?: ReleaseDetail) {
         if (!base.value || dirty.value || conflict.value || stateError.value) return;
@@ -167,16 +168,17 @@
             source: target?.revision,
             entries: target?.entries ?? base.value.entries,
             active: base.value.active,
+            savedDraft: base.value.entries,
         };
         snapshot.attempt = releaseAttempts.get(reviewKey(snapshot));
         releaseTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        reviewCompleted.value = false;
         review.value = snapshot;
+        reviewOpen.value = true;
     }
     async function afterRelease(snapshot: Snapshot, completed: ReviewSnapshot) {
-        closeReview();
         conflict.value = false;
-        const { data, error } = await loadState();
-        if (data && !error) receiveState(data);
+        await loadState();
         notice.value = {
             message:
                 completed.kind === 'rollback'
@@ -186,6 +188,8 @@
             tone: 'success',
         };
         void client.invalidateQueries({ queryKey: releaseKey });
+        reviewCompleted.value = true;
+        closeReview();
     }
 </script>
 
@@ -362,8 +366,10 @@
             :project="project.id"
             :environment="environment"
             :review="review"
+            :open="reviewOpen"
+            :finish="afterRelease"
+            :return-focus="focusAfterReview"
             @close="closeReview"
-            @released="afterRelease"
             @conflict="conflict = true"
             @remember="rememberAttempt"
         />

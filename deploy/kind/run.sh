@@ -348,6 +348,27 @@ pod_restart_count() {
     kube get "pod/$1" -o jsonpath='{.status.containerStatuses[0].restartCount}'
 }
 
+check_unavailable_probe_deadline() {
+    local pod=$1 probe
+    probe=$(
+        cat <<'EOF'
+set -eu
+while [ "$#" -lt 8 ]; do
+    (
+        status=$(curl -sS --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health/ready)
+        test "$status" = 503
+    ) &
+    set -- "$@" "$!"
+done
+for pid do
+    wait "$pid"
+done
+EOF
+    )
+    kube exec "$pod" -- sh -c "$probe"
+    printf 'Eight concurrent readiness probes returned 503 within 2 seconds in %s\n' "$pod"
+}
+
 verify_database_outage() {
     local control runtime storage control_restarts runtime_restarts storage_restarts
     control=$(api_pod api -o jsonpath='{.items[0].metadata.name}')
@@ -363,6 +384,8 @@ verify_database_outage() {
     kube exec "$control" -- curl -fsS --max-time 3 http://127.0.0.1:8080/health/live
     kube exec "$runtime" -- curl -fsS --max-time 3 http://127.0.0.1:8080/health/live
     kube exec "$storage" -- curl -fsS --max-time 3 http://127.0.0.1:8080/health/live
+    check_unavailable_probe_deadline "$control"
+    check_unavailable_probe_deadline "$runtime"
     assert_outage_status /api/auth/session
     assert_outage_status "$client_endpoint"
     kube scale statefulset flipkiln-postgres --replicas=1

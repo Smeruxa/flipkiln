@@ -5,6 +5,7 @@
 #include <deque>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -24,7 +25,8 @@ using Handler = std::function<flipkiln::Response(const flipkiln::Request&)>;
 
 class Workers {
 public:
-    explicit Workers(unsigned count) {
+    explicit Workers(unsigned count, std::size_t capacity = std::numeric_limits<std::size_t>::max())
+        : capacity_(capacity) {
         for (unsigned i = 0; i < count; ++i) {
             threads_.emplace_back([this](std::stop_token stop) { Run(stop); });
         }
@@ -42,7 +44,7 @@ public:
     bool Enqueue(std::function<void()> work) {
         {
             const std::lock_guard lock(mutex_);
-            if (done_ || queue_.size() >= 64) {
+            if (done_ || queue_.size() >= 64 || queue_.size() + active_ >= capacity_) {
                 return false;
             }
             queue_.push_back(std::move(work));
@@ -63,14 +65,21 @@ private:
                 }
                 next = std::move(queue_.front());
                 queue_.pop_front();
+                ++active_;
             }
             next();
+            {
+                const std::lock_guard lock(mutex_);
+                --active_;
+            }
         }
     }
 
     std::mutex mutex_;
     std::condition_variable_any pending_;
     std::deque<std::function<void()>> queue_;
+    const std::size_t capacity_;
+    std::size_t active_ = 0;
     bool done_ = false;
     std::vector<std::jthread> threads_;
 };
@@ -95,10 +104,12 @@ drogon::HttpResponsePtr ToHttp(flipkiln::Response result, bool forwarded_head = 
 
 void RunServer(const Handler& handle, std::string_view mode) {
     auto& app = drogon::app();
+    const bool storage_mode = mode == "storage";
+    const unsigned readiness_workers = storage_mode ? 3 : 1;
     Workers workers(8);
-    Workers readiness(1);
+    Workers readiness(readiness_workers, readiness_workers);
     const auto routes =
-        mode == "storage" ? R"(^/(?:internal/v1/.*|health/.*)$)" : R"(^/(?:api(?:/.*)?|health/.*)$)";
+        storage_mode ? R"(^/(?:internal/v1/.*|health/.*)$)" : R"(^/(?:api(?:/.*)?|health/.*)$)";
     const bool control_gateway = mode == "control";
     app.disableSession()
         .enableGzip(false)

@@ -5,6 +5,6 @@
 
 namespace flipkiln::control {
 Response SessionRoute(Database& db, const Request& request, std::string_view action, bool secure_cookie,
-                      const std::string& dummy_password_hash);
+                      const std::string& dummy_password_hash, std::string_view client_peer);
 Response ManagementRoute(Database& db, const Request& request, const std::vector<std::string>& path);
 }

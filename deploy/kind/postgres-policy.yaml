@@ -17,7 +17,7 @@ spec:
                     matchExpressions:
                         - key: app.kubernetes.io/component
                           operator: In
-                          values: [api, runtime, migrate]
+                          values: [storage-api, migrate]
           ports:
               - protocol: TCP
                 port: 5432

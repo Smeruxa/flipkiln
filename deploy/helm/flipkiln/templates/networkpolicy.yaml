@@ -33,6 +33,63 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+    name: {{ .Release.Name }}-storage-ingress
+spec:
+    podSelector:
+        matchLabels:
+            {{- include "flipkiln.labels" . | nindent 12 }}
+            app.kubernetes.io/component: storage-api
+    policyTypes: [Ingress]
+    ingress:
+        -   from:
+                -   podSelector:
+                        matchLabels:
+                            {{- include "flipkiln.labels" . | nindent 28 }}
+                        matchExpressions:
+                            -   key: app.kubernetes.io/component
+                                operator: In
+                                values: [api, runtime]
+            ports:
+                -   protocol: TCP
+                    port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: {{ .Release.Name }}-api-egress
+spec:
+    podSelector:
+        matchLabels:
+            {{- include "flipkiln.labels" . | nindent 12 }}
+        matchExpressions:
+            -   key: app.kubernetes.io/component
+                operator: In
+                values: [api, runtime]
+    policyTypes: [Egress]
+    egress:
+        -   to:
+                -   namespaceSelector:
+                        matchLabels:
+                            kubernetes.io/metadata.name: {{ $dns.namespace | quote }}
+                    podSelector:
+                        matchLabels: {{- toYaml $dns.podLabels | nindent 28 }}
+            ports:
+                -   protocol: UDP
+                    port: 53
+                -   protocol: TCP
+                    port: 53
+        -   to:
+                -   podSelector:
+                        matchLabels:
+                            {{- include "flipkiln.labels" . | nindent 28 }}
+                            app.kubernetes.io/component: storage-api
+            ports:
+                -   protocol: TCP
+                    port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
     name: {{ .Release.Name }}-database-egress
 spec:
     podSelector:
@@ -41,7 +98,7 @@ spec:
         matchExpressions:
             -   key: app.kubernetes.io/component
                 operator: In
-                values: [api, runtime, migrate]
+                values: [storage-api, migrate]
     policyTypes: [Egress]
     egress:
         -   to:
@@ -147,7 +204,7 @@ spec:
                         matchExpressions:
                             -   key: app.kubernetes.io/component
                                 operator: In
-                                values: [api, runtime, migrate]
+                                values: [storage-api, migrate]
             ports:
                 -   protocol: TCP
                     port: {{ $db.port }}

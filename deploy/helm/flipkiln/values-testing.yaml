@@ -4,6 +4,8 @@ api:
         tag: testing-placeholder
 runtime:
     existingSecret: flipkiln-testing-client
+storage:
+    existingSecret: flipkiln-testing-storage-keys
 web:
     image:
         repository: registry.example.invalid/flipkiln/web

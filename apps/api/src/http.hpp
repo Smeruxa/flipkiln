@@ -38,7 +38,7 @@ std::string ReadString(const Json& value, std::size_t low, std::size_t high);
 int ReadInt(const Json& value);
 std::string ReadId(const Json& value);
 bool ValidProject(std::string_view project);
-Json EvaluateBody(const Json& entries, const Json& body, std::string_view project,
-                  std::string_view environment);
+Json SnapshotDocument(const Snapshot& snapshot);
+EvaluationInput ReadEvaluation(const Json& body);
 }
 }

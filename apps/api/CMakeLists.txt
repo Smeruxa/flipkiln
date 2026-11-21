@@ -18,9 +18,12 @@ target_include_directories(flipkiln-domain PUBLIC src)
 target_link_libraries(flipkiln-domain PUBLIC nlohmann_json::nlohmann_json)
 
 add_executable(flipkiln-api
+    src/application/configuration.cpp
+    src/application/runtime.cpp
     src/control/routes.cpp
     src/control/sessions.cpp
     src/http.cpp
+    src/internal/storage_client.cpp
     src/main.cpp
     src/migrations.cpp
     src/postgres.cpp
@@ -30,6 +33,7 @@ add_executable(flipkiln-api
     src/storage/access.cpp
     src/storage/releases.cpp
     src/storage/runtime.cpp
+    src/storage/service.cpp
 )
 target_link_libraries(flipkiln-api PRIVATE
     flipkiln-domain

@@ -170,7 +170,7 @@ Json Tokens(Connection& connection, const Actor& actor, const Scope& scope) {
     return ReadArray(connection.Query(
         "SELECT " + std::string(kTokenColumns) +
             "::text FROM tokens WHERE project=$1 AND environment=$2 ORDER BY created_at DESC,id",
-        scope.Parameters()));
+        ScopeParameters(scope)));
 }
 
 Json CreateToken(Database& db, const Actor& actor, const Scope& scope, const std::string& name) {

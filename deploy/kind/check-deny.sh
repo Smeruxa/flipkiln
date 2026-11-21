@@ -2,11 +2,12 @@
 set -eu
 control_ip=$1
 runtime_ip=$2
-db_ip=$3
-for service in flipkiln-postgres flipkiln-api flipkiln-runtime; do
+storage_ip=$3
+db_ip=$4
+for service in flipkiln-postgres flipkiln-api flipkiln-runtime flipkiln-storage-api; do
     getent hosts "$service"
 done
-for host in "$control_ip" flipkiln-api "$runtime_ip" flipkiln-runtime; do
+for host in "$control_ip" flipkiln-api "$runtime_ip" flipkiln-runtime "$storage_ip" flipkiln-storage-api; do
     if timeout 6 wget -T 4 -qO- "http://$host:8080/health/live"; then
         printf 'Unexpected direct HTTP access at %s\n' "$host" >&2
         exit 1

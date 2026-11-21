@@ -2,6 +2,9 @@ name: flipkiln
 
 x-postgres: &postgres-image postgres@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609
 
+x-storage-control-key: &storage-control-key flipkiln-local-control-storage-secret
+x-storage-runtime-key: &storage-runtime-key flipkiln-local-runtime-storage-secret
+
 x-api: &api
     image: flipkiln-api:${FLIPKILN_IMAGE_TAG:-local}
     build:
@@ -26,6 +29,7 @@ x-api-healthcheck: &api-healthcheck
 
 services:
     postgres:
+        networks: [database]
         image: *postgres-image
         environment:
             POSTGRES_DB: flipkiln
@@ -39,6 +43,7 @@ services:
             timeout: 2s
             retries: 30
     db-access:
+        networks: [database]
         image: *postgres-image
         entrypoint:
             [
@@ -63,6 +68,7 @@ services:
             postgres:
                 condition: service_healthy
     migrate:
+        networks: [database]
         <<: *api
         entrypoint: [/usr/local/bin/flipkiln-api, migrate]
         environment:
@@ -73,27 +79,46 @@ services:
         depends_on:
             db-access:
                 condition: service_completed_successfully
-    api:
+    storage-api:
+        networks: [storage, database]
         <<: *api
         environment:
             <<: *api-environment
-            FLIPKILN_API_MODE: control
+            FLIPKILN_API_MODE: storage
+            FLIPKILN_STORAGE_READER_DATABASE_URL: >-
+                postgresql://flipkiln_reader:flipkiln-local-reader-db@postgres:5432/flipkiln?connect_timeout=3
+            FLIPKILN_STORAGE_CONTROL_KEY: *storage-control-key
+            FLIPKILN_STORAGE_RUNTIME_KEY: *storage-runtime-key
         depends_on:
             migrate:
                 condition: service_completed_successfully
+        healthcheck: *api-healthcheck
+    api:
+        networks: [edge, storage]
+        <<: *api
+        environment:
+            FLIPKILN_API_MODE: control
+            FLIPKILN_STORAGE_URL: http://storage-api:8080
+            FLIPKILN_STORAGE_KEY: *storage-control-key
+        depends_on:
+            storage-api:
+                condition: service_healthy
+                restart: true
         healthcheck: *api-healthcheck
     runtime:
+        networks: [edge, storage]
         <<: *api
         environment:
-            <<: *api-environment
-            DATABASE_URL: >-
-                postgresql://flipkiln_reader:flipkiln-local-reader-db@postgres:5432/flipkiln?connect_timeout=3
             FLIPKILN_API_MODE: runtime
+            FLIPKILN_STORAGE_URL: http://storage-api:8080
+            FLIPKILN_STORAGE_KEY: *storage-runtime-key
         depends_on:
-            migrate:
-                condition: service_completed_successfully
+            storage-api:
+                condition: service_healthy
+                restart: true
         healthcheck: *api-healthcheck
     web:
+        networks: [edge]
         image: flipkiln-web:${FLIPKILN_IMAGE_TAG:-local}
         build:
             context: .
@@ -120,6 +145,13 @@ services:
             retries: 30
         ports:
             - '127.0.0.1:${FLIPKILN_WEB_PORT:-8080}:8080'
+
+networks:
+    edge: {}
+    storage:
+        internal: true
+    database:
+        internal: true
 
 volumes:
     postgres: {}

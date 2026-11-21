@@ -45,12 +45,12 @@ void LimitLogins(const std::string& login) {
 }
 
 Response SessionRoute(Database& db, const Request& request, std::string_view action, bool secure_cookie,
-                      const std::string& dummy_password_hash) {
+                      const std::string& dummy_password_hash, std::string_view client_peer) {
     if (request.method == "POST" && action == "login") {
         const auto body = http::Body(request);
         const auto username = http::ReadId(http::Field(body, "username"));
         const auto password = http::ReadString(http::Field(body, "password"), 1, 256);
-        LimitLogins(request.peer + "/" + username);
+        LimitLogins(std::string(client_peer) + "/" + username);
         const auto stored_hash = storage::PasswordHashFor(db, username);
 
         const auto& password_hash = stored_hash ? *stored_hash : dummy_password_hash;

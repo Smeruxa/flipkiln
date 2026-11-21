@@ -1,8 +1,6 @@
 #include "runtime.hpp"
 
 #include "json_rows.hpp"
-#include "problem.hpp"
-#include "security.hpp"
 
 namespace flipkiln::storage {
 namespace {
@@ -12,12 +10,14 @@ constexpr std::string_view kReader = R"(
 )";
 }
 
-Json AuthorizedSnapshot(Connection& connection, const Scope& scope, std::string_view token) {
-    const auto rows = connection.Query(kReader, {scope.project, scope.environment, Digest(token)});
+std::optional<Snapshot> FindClientSnapshot(Connection& connection, const Scope& scope,
+                                           std::string_view token_digest) {
+    const auto rows =
+        connection.Query(kReader, {scope.project, scope.environment, std::string(token_digest)});
     if (rows.empty()) {
-        Unauthorized();
+        return std::nullopt;
     }
-    return {{"revision", std::stoi(rows.at(0).at(0).value())}, {"entries", ReadJson(rows, 1)}};
+    return Snapshot{std::stoi(rows.front().at(0).value()), ReadJson(rows, 1)};
 }
 
 void CheckRuntimeSchema(Connection& connection) { connection.Query(kReader, {"", "", ""}); }

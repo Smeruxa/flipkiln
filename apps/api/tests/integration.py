@@ -51,12 +51,15 @@ def main():
     admin = Browser()
     anon = Browser()
     anon.call("GET", "/api/manage/projects", status=401)
+    _, too_large, mime = anon.call("POST", "/api/auth/login", {"padding": "a" * (1024 * 1024)}, status=413)
+    assert too_large["error"]["code"] == "body_too_large"
+    assert mime["Content-Type"].split(";")[0] == "application/json"
     _, _, challenge = anon.call(
         "GET", "/api/client/projects/workshop/environments/development/snapshot", status=401
     )
-    assert challenge["WWW-Authenticate"] == "Bearer"
+    assert challenge["WWW-Authenticate"] == 'Bearer realm="flipkiln"'
     workshop = "/api/client/projects/workshop/environments/development/snapshot"
-    _, fixture, mime = anon.call("GET", workshop, headers={"Authorization": f"bEaReR {DEMO_TOKEN}"})
+    _, fixture, mime = anon.call("GET", workshop, headers={"Authorization": f"bEaReR   {DEMO_TOKEN}"})
     assert len(mime.get_all("Content-Type")) == 1
     assert mime["Content-Type"].split(";")[0] == "application/json"
     assert any(entry["key"] == "checkout.fast_lane" for entry in fixture["entries"])

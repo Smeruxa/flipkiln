@@ -4,6 +4,8 @@ api:
         pullPolicy: Never
 runtime:
     existingSecret: flipkiln-kind-client
+storage:
+    existingSecret: flipkiln-kind-storage-keys
 web:
     image:
         tag: local

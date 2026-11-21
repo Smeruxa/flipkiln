@@ -1,8 +1,12 @@
 #pragma once
 
-#include "db.hpp"
 #include "http.hpp"
 
-namespace flipkiln::runtime {
-Response ClientRoute(Database& db, const Request& request, const std::vector<std::string>& path);
+namespace flipkiln {
+class StorageClient;
+
+namespace runtime {
+Response ClientRoute(const StorageClient& storage, const Request& request,
+                     const std::vector<std::string>& path);
+}
 }

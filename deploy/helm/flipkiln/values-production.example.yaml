@@ -6,6 +6,8 @@ api:
 runtime:
     existingSecret: flipkiln-production-client
     replicas: 2
+storage:
+    existingSecret: flipkiln-production-storage-keys
 web:
     image:
         repository: registry.example.invalid/flipkiln/web

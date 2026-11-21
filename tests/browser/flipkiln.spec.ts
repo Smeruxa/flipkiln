@@ -276,3 +276,100 @@ test('the management console can retry after an interrupted API request', async 
     await retry.click();
     await expect(page.getByRole('button', { name: toggleKey, exact: true })).toBeVisible();
 });
+
+test('publication retry retains its request after a successful response loses its body', async ({
+    page,
+    baseURL,
+}) => {
+    await signIn(page);
+    const project = `retry-${Date.now().toString(36)}`;
+    const origin = { origin: baseURL! };
+    const created = await page.request.post('/api/manage/projects', {
+        headers: origin,
+        data: { id: project, name: 'Publication retry QA' },
+    });
+    expect(created.ok()).toBeTruthy();
+    const environment = `/api/manage/projects/${project}/environments/development`;
+    const flag = {
+        key: 'pilot.enabled',
+        description: 'Flag for a retried publication.',
+        type: 'boolean',
+        defaultValue: false,
+        enabled: true,
+        rules: [],
+    };
+    const saved = await page.request.put(`${environment}/draft`, {
+        headers: origin,
+        data: { draftVersion: 1, entries: [flag] },
+    });
+    expect(saved.ok()).toBeTruthy();
+    const attempts: { key?: string; body: unknown; status: number }[] = [];
+    await page.route(`**${environment}/publish`, async (route) => {
+        const request = route.request();
+        const response = await route.fetch();
+        attempts.push({
+            key: request.headers()['idempotency-key'],
+            body: request.postDataJSON(),
+            status: response.status(),
+        });
+        if (attempts.length === 1 && response.ok()) {
+            await route.fulfill({
+                status: response.status(),
+                contentType: 'application/json',
+                body: '{',
+            });
+        } else {
+            await route.fulfill({ response });
+        }
+    });
+
+    await page.goto(`/projects/${project}/development/entries`);
+    await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+    const review = page.getByRole('dialog');
+    const note = review.getByLabel('Release note (optional)', { exact: true });
+    const publish = review.getByRole('button', { name: 'Publish release', exact: true });
+    await note.fill('Retain the original release note.');
+    await publish.click();
+    await expect(review.getByText(/could not confirm the result/i)).toBeVisible();
+    await expect(note).toHaveValue('Retain the original release note.');
+    await expect(note).not.toBeEditable();
+    expect(attempts[0]?.key).toBeTruthy();
+    expect(attempts[0]?.status).toBe(200);
+
+    const committed = await page.request.get(`${environment}/state`);
+    expect(committed.ok()).toBeTruthy();
+    const earlier = await committed.json();
+    expect(earlier.active.revision).toBe(2);
+    const concurrentDraft = await page.request.put(`${environment}/draft`, {
+        headers: origin,
+        data: { draftVersion: earlier.draftVersion, entries: [{ ...flag, defaultValue: true }] },
+    });
+    expect(concurrentDraft.ok()).toBeTruthy();
+    const concurrentPublish = await page.request.post(`${environment}/publish`, {
+        headers: { ...origin, 'Idempotency-Key': `another-${project}` },
+        data: { draftVersion: (await concurrentDraft.json()).draftVersion, note: 'Later release' },
+    });
+    expect(concurrentPublish.ok()).toBeTruthy();
+    expect((await concurrentPublish.json()).revision).toBe(3);
+
+    const stateRequest = `**${environment}/state`;
+    await page.route(stateRequest, (route) => route.abort('connectionrefused'));
+    await publish.click();
+    await expect(review).toBeHidden();
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toEqual(attempts[0]);
+    await expect(page.getByText('Published revision 2 to Development.', { exact: true })).toBeVisible();
+    const status = page.locator('[aria-label="Environment status"]');
+    await expect(status.getByText('Revision 2', { exact: true })).toHaveCount(0);
+    const refresh = page.getByRole('button', { name: 'Try again', exact: true });
+    await expect(refresh).toBeVisible();
+    await page.unroute(stateRequest);
+    await refresh.click();
+    await expect(status.getByText('Revision 3', { exact: true })).toBeVisible();
+
+    const history = await page.request.get(`${environment}/releases`);
+    expect(history.ok()).toBeTruthy();
+    expect((await history.json()).releases.map((item: { revision: number }) => item.revision)).toEqual([
+        3, 2, 1,
+    ]);
+});

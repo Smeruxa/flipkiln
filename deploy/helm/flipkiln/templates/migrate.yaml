@@ -1,5 +1,7 @@
 {{- $secret := default .Values.secrets.existingSecret .Values.secrets.migrationSecret -}}
-{{- $apiEnv := dict "root" . "secret" $secret "migration" true -}}
+{{- $apiEnv := dict "root" . "secret" $secret -}}
+{{- $image := include "flipkiln.image" (dict "image" .Values.storage.image "fallback" .Values.api.image) -}}
+{{- $pullPolicy := default .Values.api.image.pullPolicy .Values.storage.image.pullPolicy -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -29,11 +31,11 @@ spec:
             {{- end }}
             containers:
                 -   name: migrate
-                    image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
-                    imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+                    image: {{ $image | quote }}
+                    imagePullPolicy: {{ $pullPolicy }}
                     command: [/usr/local/bin/flipkiln-api, migrate]
                     env:
-                        {{- include "flipkiln.apiEnv" $apiEnv | nindent 24 }}
+                        {{- include "flipkiln.migrationEnv" $apiEnv | nindent 24 }}
                     securityContext:
                         {{- include "flipkiln.containerSecurity" . | nindent 24 }}
                     resources: {{- toYaml .Values.api.resources | nindent 24 }}

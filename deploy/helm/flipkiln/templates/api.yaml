@@ -2,13 +2,13 @@
 {{- $root := .root -}}
 {{- $component := .component -}}
 {{- $app := .app -}}
-{{- $imageRepository := default $root.Values.api.image.repository $app.image.repository -}}
-{{- $imageTag := default $root.Values.api.image.tag $app.image.tag -}}
-{{- $apiEnv := dict "root" $root "secret" .secret "mode" .mode -}}
+{{- $image := include "flipkiln.image" (dict "image" $app.image "fallback" $root.Values.api.image) -}}
+{{- $apiEnv := dict "root" $root "mode" .mode -}}
+{{- $name := printf "%s-%s" $root.Release.Name $component | trunc 63 | trimSuffix "-" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-    name: {{ $root.Release.Name }}-{{ $component }}
+    name: {{ $name }}
     labels:
         {{- include "flipkiln.labels" $root | nindent 8 }}
         app.kubernetes.io/component: {{ $component }}
@@ -33,7 +33,7 @@ spec:
             {{- end }}
             containers:
                 -   name: {{ $component }}
-                    image: "{{ $imageRepository }}:{{ $imageTag }}"
+                    image: {{ $image | quote }}
                     imagePullPolicy: {{ default $root.Values.api.image.pullPolicy $app.image.pullPolicy }}
                     ports:
                         -   name: http
@@ -66,7 +66,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-    name: {{ $root.Release.Name }}-{{ $component }}
+    name: {{ $name }}
     labels:
         {{- include "flipkiln.labels" $root | nindent 8 }}
         app.kubernetes.io/component: {{ $component }}
@@ -80,10 +80,11 @@ spec:
             port: 8080
             targetPort: http
 {{- end }}
-{{- $control := required "secrets.existingSecret is required" .Values.secrets.existingSecret -}}
-{{- $runtime := required "runtime.existingSecret is required" .Values.runtime.existingSecret -}}
-{{ include "flipkiln.apiWorkload" (dict
-    "root" . "component" "api" "app" .Values.api "mode" "control" "secret" $control) }}
+{{- $keys := required "storage.existingSecret is required" .Values.storage.existingSecret -}}
+{{ include "flipkiln.apiWorkload" (dict "root" . "component" "api" "app" .Values.api "mode" "control") }}
 ---
 {{ include "flipkiln.apiWorkload" (dict
-    "root" . "component" "runtime" "app" .Values.runtime "mode" "runtime" "secret" $runtime) }}
+    "root" . "component" "runtime" "app" .Values.runtime "mode" "runtime") }}
+---
+{{ include "flipkiln.apiWorkload" (dict
+    "root" . "component" "storage-api" "app" .Values.storage "mode" "storage") }}

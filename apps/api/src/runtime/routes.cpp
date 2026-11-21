@@ -1,16 +1,28 @@
 #include "routes.hpp"
 
-#include "storage/runtime.hpp"
+#include <utility>
+
+#include "application/runtime.hpp"
+#include "internal/storage_client.hpp"
+#include "security.hpp"
 
 namespace flipkiln::runtime {
 namespace {
 std::string_view BearerToken(const Request& request) {
+    constexpr std::string_view scheme = "Bearer ";
     const auto authorization = http::Header(request, "authorization");
-    if (authorization.size() < 27 || authorization.size() > 263 ||
-        !http::EqualIgnoreCase(authorization.substr(0, 7), "Bearer ")) {
+    if (!http::EqualIgnoreCase(authorization.substr(0, scheme.size()), scheme)) {
         Unauthorized();
     }
-    return authorization.substr(7);
+    const auto token_start = authorization.find_first_not_of(' ', scheme.size());
+    if (token_start == std::string_view::npos) {
+        Unauthorized();
+    }
+    const auto token = authorization.substr(token_start);
+    if (token.size() < 20 || token.size() > 256) {
+        Unauthorized();
+    }
+    return token;
 }
 
 bool MatchesTag(std::string_view tags, std::string_view etag) {
@@ -31,19 +43,20 @@ bool MatchesTag(std::string_view tags, std::string_view etag) {
     return false;
 }
 
-Response ConditionalSnapshot(const Request& request, const storage::Scope& scope, const Json& snapshot) {
+Response ConditionalSnapshot(const Request& request, const Scope& scope, const Snapshot& snapshot) {
     const auto etag =
-        "\"" + scope.project + "/" + scope.environment + "/" + snapshot.at("revision").dump() + "\"";
+        "\"" + scope.project + "/" + scope.environment + "/" + std::to_string(snapshot.revision) + "\"";
     Headers headers{{"ETag", etag}, {"Cache-Control", "private, no-cache"}, {"Vary", "Authorization"}};
     if (MatchesTag(http::Header(request, "if-none-match"), etag)) {
         return {304, "", std::move(headers)};
     }
     headers.emplace("Content-Type", "application/json");
-    return {200, snapshot.dump(), std::move(headers)};
+    return {200, http::SnapshotDocument(snapshot).dump(), std::move(headers)};
 }
 }
 
-Response ClientRoute(Database& db, const Request& request, const std::vector<std::string>& path) {
+Response ClientRoute(const StorageClient& storage, const Request& request,
+                     const std::vector<std::string>& path) {
     if (path.size() != 7 || path.at(4) != "environments") {
         Missing();
     }
@@ -52,13 +65,20 @@ Response ClientRoute(Database& db, const Request& request, const std::vector<std
     if (!read && !evaluate) {
         Missing();
     }
-    const storage::Scope scope{path.at(3), path.at(5)};
-    const auto snapshot = storage::AuthorizedSnapshot(db, scope, BearerToken(request));
+    const Scope scope{path.at(3), path.at(5)};
+    if (!http::ValidProject(scope.project) ||
+        (scope.environment != "development" && scope.environment != "production")) {
+        Unauthorized();
+    }
+    auto stored = storage.Snapshot(scope.project, scope.environment, Digest(BearerToken(request)));
+    if (!stored) {
+        Unauthorized();
+    }
+    const Snapshot snapshot{stored->at("revision").get<int>(), std::move(stored->at("entries"))};
     if (read) {
         return ConditionalSnapshot(request, scope, snapshot);
     }
-    const auto results =
-        http::EvaluateBody(snapshot.at("entries"), http::Body(request), scope.project, scope.environment);
-    return http::Send(200, {{"revision", snapshot.at("revision")}, {"results", results}});
+    const auto input = http::ReadEvaluation(http::Body(request));
+    return http::Send(200, application::EvaluateSnapshot(snapshot, input, scope));
 }
 }

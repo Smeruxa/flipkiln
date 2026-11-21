@@ -25,6 +25,20 @@ runtime:
         limits:
             cpu: '1'
             memory: 256Mi
+storage:
+    image:
+        repository: ''
+        tag: ''
+        pullPolicy: ''
+    replicas: 1
+    existingSecret: flipkiln-storage-keys
+    resources:
+        requests:
+            cpu: 100m
+            memory: 96Mi
+        limits:
+            cpu: '1'
+            memory: 256Mi
 web:
     image:
         repository: flipkiln-web

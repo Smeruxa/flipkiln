@@ -3,14 +3,13 @@
 #include <algorithm>
 #include <charconv>
 
+#include "application/configuration.hpp"
 #include "storage/access.hpp"
-#include "storage/releases.hpp"
 
 namespace flipkiln::control {
 namespace {
 using storage::Actor;
 using storage::Role;
-using storage::Scope;
 
 const std::string& ProjectId(const std::vector<std::string>& path) {
     if (path.size() < 5 || !http::ValidProject(path.at(3))) {
@@ -79,7 +78,7 @@ Response ChangeToken(Database& db, const Request& request, const Actor& actor, c
     Missing();
 }
 
-storage::ReleaseRequest ReleaseBody(const Request& request, bool rollback) {
+application::ReleaseRequest ReleaseBody(const Request& request, bool rollback) {
     const auto body = http::Body(request);
     const auto version = http::ReadInt(http::Field(body, "draftVersion"));
     std::optional<int> target;
@@ -109,13 +108,14 @@ Response CheckDraft(Database& db, const Request& request, const Actor& actor, co
     storage::RequireRole(db, actor, scope.project, Role::Editor);
     const auto body = http::Body(request);
     const auto& entries = http::Field(body, "entries");
-    auto issues = storage::Validation(db, scope, entries);
+    auto issues = application::ValidateDraft(db, scope, entries);
     if (!preview) {
         return http::Send(200, {{"valid", issues.empty()}, {"issues", std::move(issues)}});
     }
     RequireValid(std::move(issues));
-    return http::Send(200,
-                      {{"results", http::EvaluateBody(entries, body, scope.project, scope.environment)}});
+    const auto input = http::ReadEvaluation(body);
+    const auto results = Evaluate(entries, input.keys, input.context, scope.project, scope.environment);
+    return http::Send(200, {{"results", results}});
 }
 
 Response ReadManagement(Connection& connection, const Actor& actor, const std::vector<std::string>& path) {
@@ -132,15 +132,13 @@ Response ReadManagement(Connection& connection, const Actor& actor, const std::v
         return http::Send(200, {{"tokens", storage::Tokens(connection, actor, scope)}});
     }
     if (path.size() == 8 && action == "releases") {
-        storage::RequireRole(connection, actor, project, Role::Viewer);
-        return http::Send(200, storage::ReleaseDetail(connection, scope, Revision(path.at(7))));
+        return http::Send(200, application::ReleaseDetail(connection, actor, scope, Revision(path.at(7))));
     }
     if (path.size() == 7 && (action == "state" || action == "releases")) {
-        storage::RequireRole(connection, actor, project, Role::Viewer);
         if (action == "state") {
-            return http::Send(200, storage::State(connection, scope));
+            return http::Send(200, application::EnvironmentState(connection, actor, scope));
         }
-        return http::Send(200, {{"releases", storage::History(connection, scope)}});
+        return http::Send(200, {{"releases", application::ReleaseHistory(connection, actor, scope)}});
     }
     Missing();
 }
@@ -157,14 +155,16 @@ Response ChangeEnvironment(Database& db, const Request& request, const Actor& ac
     if (request.method == "PUT" && action == "draft") {
         const auto body = http::Body(request);
         const auto version = http::ReadInt(http::Field(body, "draftVersion"));
-        return http::Send(200, storage::SaveDraft(db, actor, scope, version, http::Field(body, "entries")));
+        return http::Send(200,
+                          application::SaveDraft(db, actor, scope, version, http::Field(body, "entries")));
     }
     if (request.method == "POST" && (action == "validate" || action == "preview")) {
         return CheckDraft(db, request, actor, scope, action == "preview");
     }
     if (request.method == "POST" && (action == "publish" || action == "rollback")) {
-        return http::Send(200,
-                          storage::Publish(db, actor, scope, ReleaseBody(request, action == "rollback")));
+        const auto snapshot =
+            application::Publish(db, actor, scope, ReleaseBody(request, action == "rollback"));
+        return http::Send(200, http::SnapshotDocument(snapshot));
     }
     Missing();
 }

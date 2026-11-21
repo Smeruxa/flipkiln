@@ -96,27 +96,54 @@ prepare_cluster() {
     fi
     if ! kube get secret flipkiln-kind-postgres >/dev/null 2>&1; then
         db_password=$(openssl rand -hex 24)
-        kube create secret generic flipkiln-kind-postgres --from-literal="POSTGRES_PASSWORD=$db_password"
+        printf 'POSTGRES_PASSWORD=%s\n' "$db_password" | create_secret flipkiln-kind-postgres
     fi
     if ! kube get secret flipkiln-kind-runtime >/dev/null 2>&1; then
         db_password=$(kube get secret flipkiln-kind-postgres -o jsonpath='{.data.POSTGRES_PASSWORD}' |
             openssl base64 -d -A)
-        kube create secret generic flipkiln-kind-runtime \
-            --from-literal="DATABASE_URL=postgresql://flipkiln:$db_password@$postgres_endpoint" \
-            --from-literal=FLIPKILN_ADMIN_PASSWORD=flipkiln-local-demo \
-            --from-literal=FLIPKILN_DEMO_TOKEN=flipkiln-local-demo-read-token
+        {
+            printf 'DATABASE_URL=postgresql://flipkiln:%s@%s\n' "$db_password" "$postgres_endpoint"
+            printf '%s\n' FLIPKILN_ADMIN_PASSWORD=flipkiln-local-demo \
+                FLIPKILN_DEMO_TOKEN=flipkiln-local-demo-read-token
+        } | create_secret flipkiln-kind-runtime
     fi
     if ! kube get secret flipkiln-kind-client >/dev/null 2>&1; then
         reader_password=$(openssl rand -hex 24)
-        kube create secret generic flipkiln-kind-client \
-            --from-literal="DATABASE_URL=postgresql://flipkiln_reader:$reader_password@$postgres_endpoint" \
-            --from-literal="FLIPKILN_RUNTIME_PASSWORD=$reader_password"
+        {
+            printf 'DATABASE_URL=postgresql://flipkiln_reader:%s@%s\n' "$reader_password" "$postgres_endpoint"
+            printf 'FLIPKILN_RUNTIME_PASSWORD=%s\n' "$reader_password"
+        } | create_secret flipkiln-kind-client
+    fi
+    if ! kube get secret flipkiln-kind-storage-keys >/dev/null 2>&1; then
+        {
+            printf 'FLIPKILN_STORAGE_CONTROL_KEY=%s\n' "$(openssl rand -hex 32)"
+            printf 'FLIPKILN_STORAGE_RUNTIME_KEY=%s\n' "$(openssl rand -hex 32)"
+        } | create_secret flipkiln-kind-storage-keys
     fi
     kube apply -f deploy/kind/postgres-policy.yaml -f deploy/kind/postgres.yaml
     kube rollout status statefulset/flipkiln-postgres --timeout=5m
     reader_password=$(client_password)
-    kube exec -i flipkiln-postgres-0 -- env "FLIPKILN_RUNTIME_PASSWORD=$reader_password" \
-        psql -v ON_ERROR_STOP=1 -U flipkiln -d flipkiln -f - <deploy/postgres/ensure-reader.sql
+    {
+        printf '%s\n' "$reader_password"
+        cat deploy/postgres/ensure-reader.sql
+    } | psql_with_password FLIPKILN_RUNTIME_PASSWORD -v ON_ERROR_STOP=1 -U flipkiln -d flipkiln -f -
+}
+
+create_secret() {
+    kube create secret generic "$1" --from-env-file=/dev/stdin
+}
+
+psql_with_password() {
+    local remote_command
+    remote_command=$(
+        cat <<'EOF'
+IFS= read -r "$1" || exit 1
+export "$1"
+shift
+exec psql "$@"
+EOF
+    )
+    kube exec -i flipkiln-postgres-0 -- sh -c "$remote_command" psql "$@"
 }
 
 client_password() {
@@ -138,6 +165,7 @@ install_release() {
     helm_in_cluster upgrade --install "$release" "$chart" -f "$chart/values-kind.yaml" \
         --wait --timeout 4m \
         --set-string "api.image.tag=$tag" --set-string "web.image.tag=$tag" "$@" || return
+    kube rollout status deployment/flipkiln-storage-api --timeout=3m
     kube rollout status deployment/flipkiln-api --timeout=3m
     kube rollout status deployment/flipkiln-runtime --timeout=3m
     kube rollout status deployment/flipkiln-web --timeout=3m
@@ -170,14 +198,15 @@ api_pod() {
 }
 
 check_network() {
-    local db_ip control_ip runtime_ip pg_image control_pod runtime_pod status
+    local db_ip control_ip runtime_ip storage_ip pg_image control_pod runtime_pod status
     db_ip=$(kube get pod flipkiln-postgres-0 -o jsonpath='{.status.podIP}')
     control_ip=$(api_pod api -o jsonpath='{.items[0].status.podIP}')
     runtime_ip=$(api_pod runtime -o jsonpath='{.items[0].status.podIP}')
+    storage_ip=$(api_pod storage-api -o jsonpath='{.items[0].status.podIP}')
     pg_image=$(kube get statefulset flipkiln-postgres -o jsonpath='{.spec.template.spec.containers[0].image}')
     kube delete pod flipkiln-network-check --ignore-not-found --wait=true
     kube run flipkiln-network-check --image="$pg_image" --restart=Never --command -- \
-        sh -c "$(cat deploy/kind/check-deny.sh)" probe "$control_ip" "$runtime_ip" "$db_ip"
+        sh -c "$(cat deploy/kind/check-deny.sh)" probe "$control_ip" "$runtime_ip" "$storage_ip" "$db_ip"
     kube wait --for=jsonpath='{.status.phase}'=Succeeded pod/flipkiln-network-check --timeout=100s
     kube logs flipkiln-network-check
     kube delete pod flipkiln-network-check --wait=true
@@ -193,13 +222,25 @@ check_network() {
     status=$(kube exec "$control_pod" -- curl -sS -o /dev/null -w '%{http_code}' \
         "http://127.0.0.1:8080$client_endpoint")
     test "$status" = 404
+    local storage_check web_storage_check
+    web_storage_check=$(
+        cat <<'EOF'
+set -eu
+getent hosts flipkiln-storage-api >/dev/null
+if timeout 6 wget -T 4 -qO- http://flipkiln-storage-api:8080/health/live; then exit 1; fi
+EOF
+    )
+    kube exec deployment/flipkiln-web -- sh -c "$web_storage_check"
+    storage_check=$(cat deploy/kind/check-storage-boundary.sh)
+    kube exec "$control_pod" -- sh -c "$storage_check" probe control runtime
+    kube exec "$runtime_pod" -- sh -c "$storage_check" probe runtime control
 }
 
 check_runtime_role() {
     local reader_password permissions
     reader_password=$(client_password)
-    permissions=$(kube exec flipkiln-postgres-0 -- env "PGPASSWORD=$reader_password" \
-        psql -At -v ON_ERROR_STOP=1 -h 127.0.0.1 -U flipkiln_reader -d flipkiln -c "
+    permissions=$(printf '%s\n' "$reader_password" |
+        psql_with_password PGPASSWORD -At -v ON_ERROR_STOP=1 -h 127.0.0.1 -U flipkiln_reader -d flipkiln -c "
       SELECT current_setting('transaction_read_only'),
           has_schema_privilege('public', 'CREATE'),
           has_table_privilege('public.users', 'SELECT'),
@@ -231,7 +272,7 @@ check_independent_scaling() {
 }
 
 workload_generations() {
-    kube get deployment flipkiln-api flipkiln-runtime flipkiln-web \
+    kube get deployment flipkiln-api flipkiln-runtime flipkiln-storage-api flipkiln-web \
         -o jsonpath='{.items[*].metadata.generation}'
 }
 
@@ -308,25 +349,29 @@ pod_restart_count() {
 }
 
 verify_database_outage() {
-    local control runtime control_restarts runtime_restarts
+    local control runtime storage control_restarts runtime_restarts storage_restarts
     control=$(api_pod api -o jsonpath='{.items[0].metadata.name}')
     runtime=$(api_pod runtime -o jsonpath='{.items[0].metadata.name}')
+    storage=$(api_pod storage-api -o jsonpath='{.items[0].metadata.name}')
+    storage_restarts=$(pod_restart_count "$storage")
     runtime_restarts=$(pod_restart_count "$runtime")
     control_restarts=$(pod_restart_count "$control")
     restore_postgres=true
     kube scale statefulset flipkiln-postgres --replicas=0
     kube wait --for=delete pod/flipkiln-postgres-0 --timeout=60s
-    kube wait --for=condition=Ready=false "pod/$control" "pod/$runtime" --timeout=60s
+    kube wait --for=condition=Ready=false "pod/$control" "pod/$runtime" "pod/$storage" --timeout=60s
     kube exec "$control" -- curl -fsS --max-time 3 http://127.0.0.1:8080/health/live
     kube exec "$runtime" -- curl -fsS --max-time 3 http://127.0.0.1:8080/health/live
+    kube exec "$storage" -- curl -fsS --max-time 3 http://127.0.0.1:8080/health/live
     assert_outage_status /api/auth/session
     assert_outage_status "$client_endpoint"
     kube scale statefulset flipkiln-postgres --replicas=1
     kube rollout status statefulset/flipkiln-postgres --timeout=5m
-    kube wait --for=condition=Ready "pod/$control" "pod/$runtime" --timeout=90s
+    kube wait --for=condition=Ready "pod/$control" "pod/$runtime" "pod/$storage" --timeout=90s
     restore_postgres=false
     test "$control_restarts" = "$(pod_restart_count "$control")"
     test "$runtime_restarts" = "$(pod_restart_count "$runtime")"
+    test "$storage_restarts" = "$(pod_restart_count "$storage")"
     node tests/persistence.mjs compare "$artifacts/before-upgrade.json"
 }
 

@@ -25,8 +25,8 @@ Open [the console](http://localhost:8080) and sign in as `admin` with `flipkiln-
 
 ## Implementation
 
-- **Console and demo** use Vue 3, TypeScript, Vite, Vue Router, TanStack Vue Query and Reka UI.
-- **API** uses C++20, Drogon, CMake and PostgreSQL. Kubernetes runs management and application reads in separate Deployments with independent scaling.
+- **Console and demo** use Vue 3, TypeScript, SCSS, Vite, Vue Router, TanStack Vue Query and Reka UI.
+- **API** uses C++20, Drogon, CMake and PostgreSQL. Kubernetes runs control, runtime and internal storage APIs as independent Deployments.
 - **Contracts and checks** use OpenAPI and generated TypeScript types, GoogleTest, Vitest and Playwright.
 - **Deployment** uses Docker Compose for local development and Helm on Kubernetes.
 

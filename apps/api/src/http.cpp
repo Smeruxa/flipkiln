@@ -125,9 +125,6 @@ Json Body(const Request& request) {
         throw Problem{ProblemKind::UnsupportedMedia, "unsupported_media_type",
                       "Send JSON with Content-Type application/json."};
     }
-    if (request.body.size() > 1048576) {
-        throw Problem{ProblemKind::PayloadTooLarge, "body_too_large", "The request exceeds 1 MiB."};
-    }
     RequireSameSite(request);
 
     const auto document = Json::parse(
@@ -145,8 +142,11 @@ Json Body(const Request& request) {
     return document;
 }
 
-Json EvaluateBody(const Json& entries, const Json& body, std::string_view project,
-                  std::string_view environment) {
+Json SnapshotDocument(const Snapshot& snapshot) {
+    return {{"revision", snapshot.revision}, {"entries", snapshot.entries}};
+}
+
+EvaluationInput ReadEvaluation(const Json& body) {
     const auto& keys = Field(body, "keys");
     const auto& context = Field(body, "context");
     if (!keys.is_array() || keys.empty() || keys.size() > 100) {
@@ -174,7 +174,7 @@ Json EvaluateBody(const Json& entries, const Json& body, std::string_view projec
             typed_keys.push_back(identifier);
         }
     }
-    return Evaluate(entries, typed_keys, context, project, environment);
+    return {std::move(typed_keys), context};
 }
 
 }

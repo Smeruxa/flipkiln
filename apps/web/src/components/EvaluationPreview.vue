@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    import { ref, useId, watch } from 'vue';
+    import { nextTick, ref, useId, watch } from 'vue';
     import { CirclePlay, FlaskConical } from '@lucide/vue';
     import type { EvaluationResult, RequestContext } from '../lib/api';
     import { demoContext } from '../lib/demo';
@@ -10,6 +10,7 @@
     const emit = defineEmits<{ evaluate: [context: RequestContext]; reset: [] }>();
     const id = useId();
     const subject = ref('');
+    const subjectInput = ref<HTMLInputElement | null>(null);
     const attributes = ref('{}');
     const error = ref('');
     const idError = ref('');
@@ -21,9 +22,9 @@
         type_mismatch: 'Type mismatch',
     };
 
-    watch([subject, attributes], () => {
-        error.value = '';
-        idError.value = '';
+    watch([subject, attributes], ([idValue, input], [previousId, previousInput]) => {
+        if (idValue !== previousId) idError.value = '';
+        if (input !== previousInput) error.value = '';
         emit('reset');
     });
 
@@ -34,6 +35,11 @@
 
     function isValidAttributes(value: unknown): value is NonNullable<RequestContext['attributes']> {
         return isRecord(value) && Object.values(value).every(isJsonScalar);
+    }
+
+    function showIdError(message: string) {
+        idError.value = message;
+        void nextTick(() => subjectInput.value?.focus());
     }
 
     function submit() {
@@ -55,11 +61,11 @@
         try {
             idValue = subject.value === '' ? undefined : JSON.parse(subject.value);
         } catch {
-            idError.value = 'Enter the user ID as a JSON string.';
+            showIdError('Put the user ID in double quotes.');
             return;
         }
         if (idValue !== undefined && (typeof idValue !== 'string' || idValue === '')) {
-            idError.value = 'Use a nonempty JSON string or leave the user ID blank.';
+            showIdError('Enter a nonempty JSON string or leave the field blank.');
             return;
         }
         emit('evaluate', { id: idValue, attributes: parsed });
@@ -72,10 +78,19 @@
             <label :for="`${id}-subject`">User ID (optional)</label>
             <input
                 :id="`${id}-subject`"
+                ref="subjectInput"
                 v-model="subject"
+                :aria-invalid="idError ? true : undefined"
+                :aria-describedby="idError ? `${id}-id-error ${id}-id-help` : `${id}-id-help`"
                 placeholder='"customer-42"'
                 :disabled="busy"
             />
+            <p v-if="idError" :id="`${id}-id-error`" class="field-error" role="alert">{{ idError }}</p>
+            <p :id="`${id}-id-help`">
+                Use a JSON string such as
+                <code>"customer-42"</code>
+                . Leave blank to omit the user ID.
+            </p>
         </div>
         <div class="field">
             <label :for="`${id}-attributes`">Context attributes</label>

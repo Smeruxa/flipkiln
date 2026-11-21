@@ -1,0 +1,89 @@
+name: Flipkiln CI
+
+on:
+    push:
+    pull_request:
+
+permissions:
+    contents: read
+
+jobs:
+    verify:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 50
+        env:
+            FLIPKILN_IMAGE_TAG: ${{ github.sha }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+              with:
+                  node-version: '22.22.3'
+            - name: Format, contract, and frontend checks
+              run: |
+                  npm ci
+                  npm run format:check
+                  npm ci --prefix contracts
+                  npm run check --prefix contracts
+                  npm ci --prefix apps/web
+                  npm run lint --prefix apps/web
+                  npm run test --prefix apps/web
+                  npm run build --prefix apps/web
+            - name: Deployment lint and render
+              run: |
+                  deploy/kind/check-width.sh
+                  shellcheck deploy/kind/*.sh apps/api/check-style.sh
+                  go run mvdan.cc/sh/v3/cmd/shfmt@v3.12.0 -i 4 -ci -d deploy/kind/*.sh
+                  go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.8
+                  deploy/kind/tools.sh
+                  for overlay in deploy/helm/flipkiln/values-*.yaml; do
+                      .flipkiln-tools/helm lint deploy/helm/flipkiln -f "$overlay"
+                      .flipkiln-tools/helm template flipkiln deploy/helm/flipkiln -f "$overlay" > /dev/null
+                  done
+                  docker compose config --quiet
+            - name: C++ and server test style
+              run: |
+                  python3 -m venv /tmp/flipkiln-style
+                  /tmp/flipkiln-style/bin/pip install clang-format==21.1.8 ruff==0.14.14
+                  PATH="/tmp/flipkiln-style/bin:$PATH" apps/api/check-style.sh
+            - name: C++ checks
+              run: docker build --target test -f apps/api/Dockerfile .
+            - name: Build a single image per component
+              run: |
+                  for component in api web; do
+                      docker build --label "org.opencontainers.image.revision=$FLIPKILN_IMAGE_TAG" \
+                          --tag "flipkiln-$component:$FLIPKILN_IMAGE_TAG" -f "apps/$component/Dockerfile" .
+                  done
+            - name: Install real browser
+              run: |
+                  npm ci --prefix tests
+                  npm exec --prefix tests -- playwright install --with-deps chromium
+            - name: Compose HTTP and browser acceptance
+              env:
+                  FLIPKILN_BASE_URL: http://127.0.0.1:8080
+                  FLIPKILN_SCREENSHOTS: ${{ github.workspace }}/test-results/compose/screenshots
+                  PLAYWRIGHT_HTML_OUTPUT_DIR: ${{ github.workspace }}/test-results/compose/playwright-report
+              run: |
+                  mkdir -p test-results/compose
+                  docker compose up -d --wait --wait-timeout 120 --no-build
+                  python3 apps/api/tests/integration.py
+                  npm test --prefix tests -- \
+                      --output "$GITHUB_WORKSPACE/test-results/compose/playwright-results"
+            - name: Capture Compose diagnostic logs
+              if: failure()
+              run: |
+                  mkdir -p test-results/compose
+                  docker compose ps -a > test-results/compose/compose-status.log
+                  docker compose logs --no-color > test-results/compose/compose.log
+            - name: Install Helm release and verify lifecycle in kind
+              env:
+                  SKIP_BUILD: '1'
+              run: deploy/kind/run.sh verify
+            - name: Publish acceptance evidence
+              if: always()
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+              with:
+                  name: flipkiln-acceptance
+                  path: test-results
+                  if-no-files-found: ignore

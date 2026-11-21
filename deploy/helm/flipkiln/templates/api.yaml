@@ -1,0 +1,89 @@
+{{- define "flipkiln.apiWorkload" -}}
+{{- $root := .root -}}
+{{- $component := .component -}}
+{{- $app := .app -}}
+{{- $imageRepository := default $root.Values.api.image.repository $app.image.repository -}}
+{{- $imageTag := default $root.Values.api.image.tag $app.image.tag -}}
+{{- $apiEnv := dict "root" $root "secret" .secret "mode" .mode -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: {{ $root.Release.Name }}-{{ $component }}
+    labels:
+        {{- include "flipkiln.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+spec:
+    replicas: {{ $app.replicas }}
+    selector:
+        matchLabels:
+            {{- include "flipkiln.labels" $root | nindent 12 }}
+            app.kubernetes.io/component: {{ $component }}
+    template:
+        metadata:
+            labels:
+                {{- include "flipkiln.labels" $root | nindent 16 }}
+                app.kubernetes.io/component: {{ $component }}
+        spec:
+            automountServiceAccountToken: false
+            terminationGracePeriodSeconds: 30
+            securityContext:
+                {{- include "flipkiln.podSecurity" . | nindent 16 }}
+            {{- with $root.Values.imagePullSecrets }}
+            imagePullSecrets: {{- toYaml . | nindent 16 }}
+            {{- end }}
+            containers:
+                -   name: {{ $component }}
+                    image: "{{ $imageRepository }}:{{ $imageTag }}"
+                    imagePullPolicy: {{ default $root.Values.api.image.pullPolicy $app.image.pullPolicy }}
+                    ports:
+                        -   name: http
+                            containerPort: 8080
+                    env:
+                        {{- include "flipkiln.apiEnv" $apiEnv | nindent 24 }}
+                    securityContext:
+                        {{- include "flipkiln.containerSecurity" . | nindent 24 }}
+                    resources: {{- toYaml $app.resources | nindent 24 }}
+                    startupProbe:
+                        httpGet: {path: /health/live, port: http}
+                        periodSeconds: 2
+                        failureThreshold: 30
+                    livenessProbe:
+                        httpGet: {path: /health/live, port: http}
+                        periodSeconds: 10
+                    readinessProbe:
+                        httpGet: {path: /health/ready, port: http}
+                        periodSeconds: 2
+                        timeoutSeconds: 2
+                        failureThreshold: 2
+                    volumeMounts:
+                        -   name: tmp
+                            mountPath: /tmp
+            volumes:
+                -   name: tmp
+                    emptyDir:
+                        sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: {{ $root.Release.Name }}-{{ $component }}
+    labels:
+        {{- include "flipkiln.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+spec:
+    type: ClusterIP
+    selector:
+        {{- include "flipkiln.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+    ports:
+        -   name: http
+            port: 8080
+            targetPort: http
+{{- end }}
+{{- $control := required "secrets.existingSecret is required" .Values.secrets.existingSecret -}}
+{{- $runtime := required "runtime.existingSecret is required" .Values.runtime.existingSecret -}}
+{{ include "flipkiln.apiWorkload" (dict
+    "root" . "component" "api" "app" .Values.api "mode" "control" "secret" $control) }}
+---
+{{ include "flipkiln.apiWorkload" (dict
+    "root" . "component" "runtime" "app" .Values.runtime "mode" "runtime" "secret" $runtime) }}

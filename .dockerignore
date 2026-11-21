@@ -5,6 +5,12 @@
 **/coverage
 **/test-results
 **/playwright-report
-.env
-.env.*
+**/.env*
+**/*.key
+**/*.pem
+**/kubeconfig*
+**/*.kubeconfig
+**/.codex
+**/.aws
+**/.ssh
 .flipkiln-tools

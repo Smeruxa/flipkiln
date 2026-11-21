@@ -1,0 +1,32 @@
+api:
+    image:
+        repository: registry.example.invalid/flipkiln/api
+        tag: revision-placeholder
+    replicas: 2
+runtime:
+    existingSecret: flipkiln-production-client
+    replicas: 2
+web:
+    image:
+        repository: registry.example.invalid/flipkiln/web
+        tag: revision-placeholder
+    replicas: 2
+secrets:
+    existingSecret: flipkiln-production-control
+    migrationSecret: flipkiln-production-migrations
+migrations:
+    runtimeRole: flipkiln_production_reader
+networkPolicy:
+    postgres:
+        cidrs:
+            - 192.0.2.40/32
+ingress:
+    enabled: true
+    className: traefik
+    annotations:
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    host: flipkiln.example.invalid
+    tlsSecret: flipkiln-production-tls
+    controllerNamespace: kube-system
+    controllerPodLabels:
+        app.kubernetes.io/name: traefik

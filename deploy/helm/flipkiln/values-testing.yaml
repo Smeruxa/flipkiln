@@ -1,0 +1,30 @@
+api:
+    image:
+        repository: registry.example.invalid/flipkiln/api
+        tag: testing-placeholder
+runtime:
+    existingSecret: flipkiln-testing-client
+web:
+    image:
+        repository: registry.example.invalid/flipkiln/web
+        tag: testing-placeholder
+secrets:
+    existingSecret: flipkiln-testing-control
+migrations:
+    runtimeRole: flipkiln_testing_reader
+networkPolicy:
+    postgres:
+        podLabels:
+            app.kubernetes.io/name: postgresql
+            app.kubernetes.io/instance: flipkiln-testing-db
+        manageIngress: true
+ingress:
+    enabled: true
+    className: nginx
+    annotations:
+        nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    controllerPodLabels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/name: ingress-nginx
+    host: flipkiln-testing.example.invalid
+    tlsSecret: flipkiln-testing-tls

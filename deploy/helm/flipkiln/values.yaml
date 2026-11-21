@@ -1,0 +1,72 @@
+api:
+    image:
+        repository: flipkiln-api
+        tag: '0.1.0'
+        pullPolicy: IfNotPresent
+    replicas: 1
+    resources:
+        requests:
+            cpu: 100m
+            memory: 96Mi
+        limits:
+            cpu: '1'
+            memory: 256Mi
+runtime:
+    image:
+        repository: ''
+        tag: ''
+        pullPolicy: ''
+    replicas: 1
+    existingSecret: flipkiln-client-runtime
+    resources:
+        requests:
+            cpu: 100m
+            memory: 80Mi
+        limits:
+            cpu: '1'
+            memory: 256Mi
+web:
+    image:
+        repository: flipkiln-web
+        tag: '0.1.0'
+        pullPolicy: IfNotPresent
+    replicas: 1
+    resources:
+        requests:
+            cpu: 25m
+            memory: 24Mi
+        limits:
+            cpu: 200m
+            memory: 96Mi
+imagePullSecrets: []
+secrets:
+    existingSecret: flipkiln-control
+    migrationSecret: ''
+config:
+    demo: false
+    secureCookie: true
+migrations:
+    runtimeRole: flipkiln_reader
+    activeDeadlineSeconds: 120
+networkPolicy:
+    enabled: true
+    dns:
+        namespace: kube-system
+        podLabels:
+            k8s-app: kube-dns
+    postgres:
+        port: 5432
+        namespace: ''
+        cidrs: []
+        podLabels:
+            app.kubernetes.io/name: flipkiln-postgres
+            app.kubernetes.io/instance: flipkiln-db
+        manageIngress: false
+ingress:
+    enabled: false
+    className: ''
+    annotations: {}
+    host: ''
+    tlsSecret: ''
+    controllerNamespace: ingress-nginx
+    controllerPodLabels: {}

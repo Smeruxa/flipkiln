@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: {{ .Release.Name }}-web
+    labels:
+        {{- include "flipkiln.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+spec:
+    replicas: {{ .Values.web.replicas }}
+    selector:
+        matchLabels:
+            {{- include "flipkiln.labels" . | nindent 12 }}
+            app.kubernetes.io/component: web
+    template:
+        metadata:
+            labels:
+                {{- include "flipkiln.labels" . | nindent 16 }}
+                app.kubernetes.io/component: web
+        spec:
+            automountServiceAccountToken: false
+            terminationGracePeriodSeconds: 15
+            securityContext:
+                {{- include "flipkiln.podSecurity" . | nindent 16 }}
+            {{- with .Values.imagePullSecrets }}
+            imagePullSecrets: {{- toYaml . | nindent 16 }}
+            {{- end }}
+            containers:
+                -   name: web
+                    image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+                    imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+                    ports:
+                        -   name: http
+                            containerPort: 8080
+                    env:
+                        -   name: FLIPKILN_API_UPSTREAM
+                            value: http://{{ .Release.Name }}-api:8080
+                        -   name: FLIPKILN_RUNTIME_UPSTREAM
+                            value: http://{{ .Release.Name }}-runtime:8080
+                    securityContext:
+                        {{- include "flipkiln.containerSecurity" . | nindent 24 }}
+                    resources: {{- toYaml .Values.web.resources | nindent 24 }}
+                    livenessProbe:
+                        httpGet: {path: /health/web, port: http}
+                    readinessProbe:
+                        httpGet: {path: /health/web, port: http}
+                        periodSeconds: 2
+                    volumeMounts:
+                        -   name: tmp
+                            mountPath: /tmp
+            volumes:
+                -   name: tmp
+                    emptyDir:
+                        sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: {{ .Release.Name }}-web
+    labels:
+        {{- include "flipkiln.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+spec:
+    type: ClusterIP
+    selector:
+        {{- include "flipkiln.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    ports:
+        -   name: http
+            port: 8080
+            targetPort: http

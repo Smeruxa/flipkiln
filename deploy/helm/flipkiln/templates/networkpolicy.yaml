@@ -1,0 +1,155 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $db := .Values.networkPolicy.postgres }}
+{{- $dns := .Values.networkPolicy.dns }}
+{{- if not $dns.podLabels }}
+{{- fail "networkPolicy.dns.podLabels is required when network policies are enabled" }}
+{{- end }}
+{{- if not (or $db.podLabels $db.cidrs) }}
+{{- fail "networkPolicy.postgres.podLabels or cidrs are required" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: {{ .Release.Name }}-api-ingress
+spec:
+    podSelector:
+        matchLabels:
+            {{- include "flipkiln.labels" . | nindent 12 }}
+        matchExpressions:
+            -   key: app.kubernetes.io/component
+                operator: In
+                values: [api, runtime]
+    policyTypes: [Ingress]
+    ingress:
+        -   from:
+                -   podSelector:
+                        matchLabels:
+                            {{- include "flipkiln.labels" . | nindent 28 }}
+                            app.kubernetes.io/component: web
+            ports:
+                -   protocol: TCP
+                    port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: {{ .Release.Name }}-database-egress
+spec:
+    podSelector:
+        matchLabels:
+            {{- include "flipkiln.labels" . | nindent 12 }}
+        matchExpressions:
+            -   key: app.kubernetes.io/component
+                operator: In
+                values: [api, runtime, migrate]
+    policyTypes: [Egress]
+    egress:
+        -   to:
+                -   namespaceSelector:
+                        matchLabels:
+                            kubernetes.io/metadata.name: {{ $dns.namespace | quote }}
+                    podSelector:
+                        matchLabels: {{- toYaml $dns.podLabels | nindent 28 }}
+            ports:
+                -   protocol: UDP
+                    port: 53
+                -   protocol: TCP
+                    port: 53
+        -   to:
+                {{- if $db.cidrs }}
+                {{- range $db.cidrs }}
+                -   ipBlock:
+                        cidr: {{ . | quote }}
+                {{- end }}
+                {{- else }}
+                {{- if $db.namespace }}
+                -   namespaceSelector:
+                        matchLabels:
+                            kubernetes.io/metadata.name: {{ $db.namespace | quote }}
+                    podSelector:
+                    {{- else }}
+                -   podSelector:
+                    {{- end }}
+                        matchLabels: {{- toYaml $db.podLabels | nindent 28 }}
+                {{- end }}
+            ports:
+                -   protocol: TCP
+                    port: {{ $db.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: {{ .Release.Name }}-web-network
+spec:
+    podSelector:
+        matchLabels:
+            {{- include "flipkiln.labels" . | nindent 12 }}
+            app.kubernetes.io/component: web
+    policyTypes: [Ingress, Egress]
+    {{- if .Values.ingress.enabled }}
+    {{- if not .Values.ingress.controllerPodLabels }}
+    {{- fail "ingress.controllerPodLabels is required for web network policy" }}
+    {{- end }}
+    ingress:
+        -   from:
+                -   namespaceSelector:
+                        matchLabels:
+                            kubernetes.io/metadata.name: {{ .Values.ingress.controllerNamespace | quote }}
+                    podSelector:
+                        matchLabels: {{- toYaml .Values.ingress.controllerPodLabels | nindent 28 }}
+            ports:
+                -   protocol: TCP
+                    port: 8080
+    {{- else }}
+    ingress: []
+    {{- end }}
+    egress:
+        -   to:
+                -   namespaceSelector:
+                        matchLabels:
+                            kubernetes.io/metadata.name: {{ $dns.namespace | quote }}
+                    podSelector:
+                        matchLabels: {{- toYaml $dns.podLabels | nindent 28 }}
+            ports:
+                -   protocol: UDP
+                    port: 53
+                -   protocol: TCP
+                    port: 53
+        -   to:
+                -   podSelector:
+                        matchLabels:
+                            {{- include "flipkiln.labels" . | nindent 28 }}
+                        matchExpressions:
+                            -   key: app.kubernetes.io/component
+                                operator: In
+                                values: [api, runtime]
+            ports:
+                -   protocol: TCP
+                    port: 8080
+{{- if $db.manageIngress }}
+{{- if or $db.namespace $db.cidrs }}
+{{- fail "networkPolicy.postgres.manageIngress requires PostgreSQL pods in the release namespace" }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: {{ .Release.Name }}-database-ingress
+spec:
+    podSelector:
+        matchLabels: {{- toYaml $db.podLabels | nindent 12 }}
+    policyTypes: [Ingress]
+    ingress:
+        -   from:
+                -   podSelector:
+                        matchLabels:
+                            {{- include "flipkiln.labels" . | nindent 28 }}
+                        matchExpressions:
+                            -   key: app.kubernetes.io/component
+                                operator: In
+                                values: [api, runtime, migrate]
+            ports:
+                -   protocol: TCP
+                    port: {{ $db.port }}
+{{- end }}
+{{- end }}

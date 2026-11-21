@@ -1,0 +1,7 @@
+apiVersion: v2
+name: flipkiln
+description: Flipkiln feature flags and remote configuration
+version: 0.1.0
+appVersion: '0.1.0'
+type: application
+kubeVersion: '>=1.27.0-0'

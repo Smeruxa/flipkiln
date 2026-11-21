@@ -1,0 +1,28 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := required "ingress.host is required" .Values.ingress.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+    name: {{ .Release.Name }}-web
+    labels:
+        {{- include "flipkiln.labels" . | nindent 8 }}
+    {{- with .Values.ingress.annotations }}
+    annotations: {{- toYaml . | nindent 8 }}
+    {{- end }}
+spec:
+    ingressClassName: {{ required "ingress.className is required" .Values.ingress.className | quote }}
+    tls:
+        -   secretName: {{ required "ingress.tlsSecret is required" .Values.ingress.tlsSecret | quote }}
+            hosts: [{{ $host | quote }}]
+    rules:
+        -   host: {{ $host | quote }}
+            http:
+                paths:
+                    -   path: /
+                        pathType: Prefix
+                        backend:
+                            service:
+                                name: {{ .Release.Name }}-web
+                                port:
+                                    name: http
+{{- end }}

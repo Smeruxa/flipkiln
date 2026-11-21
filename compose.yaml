@@ -1,0 +1,125 @@
+name: flipkiln
+
+x-postgres: &postgres-image postgres@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609
+
+x-api: &api
+    image: flipkiln-api:${FLIPKILN_IMAGE_TAG:-local}
+    build:
+        context: .
+        dockerfile: apps/api/Dockerfile
+    read_only: true
+    tmpfs:
+        - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+x-api-environment: &api-environment
+    DATABASE_URL: postgresql://flipkiln:flipkiln-local-db@postgres:5432/flipkiln?connect_timeout=3
+    FLIPKILN_DEMO: 'true'
+    FLIPKILN_COOKIE_SECURE: 'false'
+
+x-api-healthcheck: &api-healthcheck
+    test: [CMD, curl, -fsS, http://localhost:8080/health/ready]
+    interval: 2s
+    timeout: 3s
+    retries: 30
+
+services:
+    postgres:
+        image: *postgres-image
+        environment:
+            POSTGRES_DB: flipkiln
+            POSTGRES_USER: flipkiln
+            POSTGRES_PASSWORD: flipkiln-local-db
+        volumes:
+            - postgres:/var/lib/postgresql/data
+        healthcheck:
+            test: [CMD, pg_isready, -h, localhost, -U, flipkiln, -d, flipkiln]
+            interval: 2s
+            timeout: 2s
+            retries: 30
+    db-access:
+        image: *postgres-image
+        entrypoint:
+            [
+                psql,
+                -v,
+                ON_ERROR_STOP=1,
+                -h,
+                postgres,
+                -U,
+                flipkiln,
+                -d,
+                flipkiln,
+                -f,
+                /bootstrap/ensure-reader.sql,
+            ]
+        environment:
+            PGPASSWORD: flipkiln-local-db
+            FLIPKILN_RUNTIME_PASSWORD: flipkiln-local-reader-db
+        volumes:
+            - ./deploy/postgres/ensure-reader.sql:/bootstrap/ensure-reader.sql:ro
+        depends_on:
+            postgres:
+                condition: service_healthy
+    migrate:
+        <<: *api
+        entrypoint: [/usr/local/bin/flipkiln-api, migrate]
+        environment:
+            <<: *api-environment
+            FLIPKILN_ADMIN_PASSWORD: flipkiln-local-demo
+            FLIPKILN_DEMO_TOKEN: flipkiln-local-demo-read-token
+            FLIPKILN_RUNTIME_ROLE: flipkiln_reader
+        depends_on:
+            db-access:
+                condition: service_completed_successfully
+    api:
+        <<: *api
+        environment:
+            <<: *api-environment
+            FLIPKILN_API_MODE: control
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+        healthcheck: *api-healthcheck
+    runtime:
+        <<: *api
+        environment:
+            <<: *api-environment
+            DATABASE_URL: >-
+                postgresql://flipkiln_reader:flipkiln-local-reader-db@postgres:5432/flipkiln?connect_timeout=3
+            FLIPKILN_API_MODE: runtime
+        depends_on:
+            migrate:
+                condition: service_completed_successfully
+        healthcheck: *api-healthcheck
+    web:
+        image: flipkiln-web:${FLIPKILN_IMAGE_TAG:-local}
+        build:
+            context: .
+            dockerfile: apps/web/Dockerfile
+        read_only: true
+        tmpfs:
+            - /tmp
+        cap_drop: [ALL]
+        security_opt: [no-new-privileges:true]
+        environment:
+            FLIPKILN_API_UPSTREAM: http://api:8080
+            FLIPKILN_RUNTIME_UPSTREAM: http://runtime:8080
+        depends_on:
+            api:
+                condition: service_healthy
+                restart: true
+            runtime:
+                condition: service_healthy
+                restart: true
+        healthcheck:
+            test: [CMD, wget, -qO, /dev/null, http://127.0.0.1:8080/health/web]
+            interval: 2s
+            timeout: 3s
+            retries: 30
+        ports:
+            - '127.0.0.1:${FLIPKILN_WEB_PORT:-8080}:8080'
+
+volumes:
+    postgres: {}

@@ -3,5 +3,13 @@
     "useTabs": false,
     "printWidth": 104,
     "singleQuote": true,
-    "vueIndentScriptAndStyle": true
+    "vueIndentScriptAndStyle": true,
+    "overrides": [
+        {
+            "files": "**/*.vue",
+            "options": {
+                "htmlWhitespaceSensitivity": "ignore"
+            }
+        }
+    ]
 }

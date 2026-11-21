@@ -1,0 +1,40 @@
+server {
+  listen 8080;
+  root /usr/share/nginx/html;
+  index index.html;
+  client_max_body_size 2m;
+
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy no-referrer always;
+  add_header X-Frame-Options DENY always;
+
+  location = /health/web { return 204; }
+
+  location /api/client/ {
+    proxy_pass ${FLIPKILN_RUNTIME_UPSTREAM};
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Connection "";
+    proxy_set_header Cookie "";
+    proxy_hide_header Set-Cookie;
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 15s;
+  }
+
+  location /api/ {
+    proxy_pass ${FLIPKILN_API_UPSTREAM};
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Connection "";
+    proxy_set_header Authorization "";
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 15s;
+  }
+
+  location /assets/ {
+    expires 1y;
+    try_files $uri =404;
+  }
+
+  location / { try_files $uri $uri/ /index.html; }
+}
